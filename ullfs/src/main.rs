@@ -35,7 +35,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // This can happen if you remove all log statements from your eBPF program.
         warn!("failed to initialize eBPF logger: {}", e);
     }
-    let program: &mut KProbe = bpf.program_mut("ullfs").unwrap().try_into()?;
+    let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
     program.load()?;
     program.attach("vfs_write", 0)?;
 
