@@ -27,13 +27,13 @@ fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
 }
 fn try_get_buffer(ctx: &ProbeContext) -> Result<*const u8, i64>{
 
-    let buf : *const u8 = ctx.arg(2).ok_or(1i64)?;
+    let buf : *const u8 = ctx.arg(1).ok_or(1i64)?;
     return Ok(buf);
     
 }
 fn try_get_count(ctx: &ProbeContext) -> Result<usize, i64>{
     // let ctx = *ctx_ref;
-    let size : usize = ctx.arg(3).ok_or(2i64)?;
+    let size : usize = ctx.arg(2).ok_or(2i64)?;
     // Ok(size)
     // let sizeStr : u128 = size as u128;
     info!(ctx, "VFS_Write called with buffer size: {}", size);
