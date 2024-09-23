@@ -164,6 +164,10 @@ dependencies = [
 [[package]]
 name = "ullfs-common"
 version = "0.1.0"
+dependencies = [
+ "aya-ebpf",
+ "aya-log-ebpf",
+]
 
 [[package]]
 name = "ullfs-ebpf"
