@@ -4,6 +4,7 @@
 use aya_ebpf::{macros::kprobe, programs::ProbeContext};
 use aya_log_ebpf::info;
 use core::str::Bytes;
+
 const MAX_BUFFER_SIZE: usize = 1024;
 #[kprobe]
 fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
@@ -34,7 +35,8 @@ fn try_get_count(ctx: &ProbeContext) -> Result<usize, i64>{
     // let ctx = *ctx_ref;
     let size : usize = ctx.arg(3).ok_or(2i64)?;
     // Ok(size)
-    info!(ctx, "VFS_Write called with buffer size: ", size);
+    // let sizeStr : u128 = size as u128;
+    info!(ctx, "VFS_Write called with buffer size: {}", size);
     return Ok(size);
 }
 
