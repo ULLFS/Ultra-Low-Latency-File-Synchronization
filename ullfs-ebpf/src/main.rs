@@ -1,14 +1,42 @@
 #![no_std]
 #![no_main]
 
-use aya_ebpf::{macros::kprobe, programs::ProbeContext};
+mod binding;
+
+use crate::binding::*;
+
+use aya_ebpf::{
+    helpers::bpf_probe_read_kernel,
+    macros::{kprobe,map},
+    maps::{HashMap, Array},
+    programs::ProbeContext,
+};
 use aya_log_ebpf::info;
 use core::str::Bytes;
 
+#[map] // 
+static INODEDATA: Array<u32> =
+    Array::<u32>::with_max_entries(1024, 0);
+
 const MAX_BUFFER_SIZE: usize = 1024;
+
 #[kprobe]
 fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
+    /*
+    let file: *mut file = ctx.arg(0).ok_or(1i64)?;
+    let tpath = unsafe{(*file).f_path};
+    let tdentry = tpath.dentry;
+
+    let inode = unsafe{(*tdentry).d_inode};
+
+    let curnode: u64 = unsafe{(*inode).i_ino};
+    //let parentdentry = unsafe{(*dentry).d_parent};
+
+    //
+
+    info!(&ctx, "current node {}", curnode);
     // Get the buffer pointer and count (size of data to write)
+    */
     let fail: u8 = 1;
     // let ctx_ref : &ProbeContext = &ctx;
 

@@ -1,5 +1,9 @@
 use aya::programs::KProbe;
-use aya::{include_bytes_aligned, Bpf};
+use aya::{
+    include_bytes_aligned,
+    Bpf,
+    maps::{HashMap,Array},
+};
 use aya_log::BpfLogger;
 use log::{info, warn, debug};
 use tokio::signal;
@@ -38,6 +42,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
     program.load()?;
     program.attach("vfs_write", 0)?;
+
+    let mut inodesdata: Array<_, u32> =
+    Array::try_from(bpf.map_mut("INODEDATA").unwrap())?;
+
+    let block_addr: u32 = 31085353; 
+
+    //{Index, Value, Flags}
+    inodesdata.set(0, block_addr, 0)?;
 
     info!("Waiting for Ctrl-C...");
     signal::ctrl_c().await?;
