@@ -2,9 +2,9 @@
 #![no_main]
 #![allow(warnings)]
 
-mod binding;
+mod vmlinux;
 
-use crate::binding::{file, inode, path, vfsmount, dentry, qstr};
+use vmlinux::{file, inode, path, vfsmount, dentry, qstr};
 
 use aya_ebpf::{
     helpers::bpf_probe_read_kernel,
