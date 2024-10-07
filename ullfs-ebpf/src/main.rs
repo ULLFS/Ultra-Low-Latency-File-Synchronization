@@ -21,8 +21,8 @@ use core::str::Bytes;
 use core::mem::MaybeUninit;
 
 #[map] // 
-static INODEDATA: Array<u32> =
-    Array::<u32>::with_max_entries(1024, 0);
+static INODEDATA: Array<u64> =
+    Array::<u64>::with_max_entries(1024, 0);
 
 const MAX_BUFFER_SIZE: usize = 1024;
 #[repr(C)]
@@ -85,7 +85,7 @@ fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
     // unsafe {
     //     core::ptr::copy_nonoverlapping(dname.as_ptr(), dir_name.as_mut_ptr(), dname_len);
     // }
-    let val : i64 = match try_vfs_write(&ctx){
+    let val : i64 = match try_vfs_write_alt(&ctx){
         Ok(x) => x,
         Err(x) => x,
     };
@@ -114,12 +114,79 @@ fn try_get_count(ctx: &ProbeContext) -> Result<usize, i64>{
 //     return "";
 // }
 
+fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
+    unsafe{
+        //let key: u32 = 0; // Assuming a single key for now
+        //let dir_inode = match INODEDATA.get(key) {
+        //    Some(inode) => inode,
+        //    None => return 0, // If no inode is found, return early
+        //};
+
+        //let file: *const vmlinux::file = match ctx.arg(0){
+        //    None => return 0,
+        //    Some(x) => x,
+        //};
+
+        // Read the dentry pointer from the file struct
+        let dentry: *const vmlinux::dentry = match bpf_probe_read_kernel(&(*file).f_path.dentry) {
+            Ok(dent) => dent,
+            Err(_) => return 0, // If reading dentry fails, return early
+        };
+
+        let mut current_dentry: *const vmlinux::dentry = dentry;
+
+        // Traverse up the directory structure by following parent dentries
+        for _ in 0..10 {  // Max depth of 10 to avoid infinite loops
+            if current_dentry.is_null() {
+                break;  // Stop if we've reached the root
+            }
+
+            // Check if the current dentry's inode matches the directory inode from inodedir map
+            let inode: *const vmlinux::inode = match bpf_probe_read_kernel(&(*current_dentry).d_inode) {
+                Ok(inode_ptr) => inode_ptr,
+                Err(_) => break, // If reading inode fails, stop traversal
+            };
+
+            let inode_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
+                Ok(inode_num) => inode_num,
+                Err(_) => break, // If reading inode number fails, stop traversal
+            };
+
+            if inode_num == dir_inode {
+                // Match found, we are in the directory we care about
+                return 1;  // Return success
+            }
+
+            // Move to the parent directory
+            current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
+                Ok(parent) => parent,
+                Err(_) => break, // If reading parent fails, stop traversal
+            };
+        }
+    }
+    0 // Return 0 if no match is found
+}
+
+
 fn try_vfs_write_alt(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
+    
+    //get_file_path(&ctx);
+    
     unsafe {
-        let file: *const file = match ctx.arg(0){
+        let key: u32 = 0; // Assuming a single key for now
+        let dir_inode = match INODEDATA.get(key) {
+            Some(inode) => inode,
+            None => return Err(2i64),
+        };
+        let file: *const vmlinux::file = match ctx.arg(0){
             None => return Err(2i64),
             Some(x) => x,
         };
+        if (in_dir(file,*dir_inode) == 0){
+            return Ok(0i64);
+        }
+
+
         let path = bpf_probe_read_kernel(&(*file).f_path)?;
         let dent = path.dentry;
         let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
@@ -136,7 +203,7 @@ fn try_vfs_write_alt(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
     Ok(0i64)
 }
 fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
-    unsafe {
+    /*unsafe {
         let file: *const file = match ctx.arg(0){
             None => return Err(2i64),
             Some(x) => x,
@@ -144,7 +211,8 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         let inod = bpf_probe_read_kernel(&(*file).f_inode)?;
         let ino : u64 = bpf_probe_read_kernel(&(*inod).i_ino)?;
         info!(ctx, "path : {}", ino);
-    }
+    }*/
+    info!(ctx, "path");
     Ok(0i64)
 }
 // fn safe_read<T>(ptr: *const T) -> Option<T> {

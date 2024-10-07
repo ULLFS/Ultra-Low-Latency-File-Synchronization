@@ -43,10 +43,10 @@ async fn main() -> Result<(), anyhow::Error> {
     program.load()?;
     program.attach("vfs_write", 0)?;
 
-    let mut inodesdata: Array<_, u32> =
+    let mut inodesdata: Array<_, u64> =
     Array::try_from(bpf.map_mut("INODEDATA").unwrap())?;
 
-    let block_addr: u32 = 31085353; 
+    let block_addr: u64 = 31085353; 
 
     //{Index, Value, Flags}
     inodesdata.set(0, block_addr, 0)?;
