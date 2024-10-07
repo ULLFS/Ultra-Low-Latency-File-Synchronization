@@ -24,7 +24,9 @@ use core::mem::MaybeUninit;
 #[map] // 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(1024, 0);
-
+#[map]
+static PROGDATA: Array<u64> =
+    Array::<u64>::with_max_entries(1024,0);
 const MAX_BUFFER_SIZE: usize = 1024;
 #[repr(C)]
 pub struct Buf {
@@ -163,6 +165,7 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
                 Ok(parent) => parent,
                 Err(_) => break, // If reading parent fails, stop traversal
             };
+
         }
     }
     0 // Return 0 if no match is found
@@ -209,8 +212,10 @@ fn try_vfs_write_alt(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         let mut my_str = [0u8; 8];
         let qstring: ::aya_ebpf::cty::c_uchar = bpf_probe_read_kernel((*dent).d_name.name)?;
         bpf_probe_read_kernel_str(&qstring, &mut my_str)?;
+        // for i in 0..length{
 
-        info!(ctx, "path : {}", my_str);
+        // }
+        // info!(ctx, "path : {}", length);
 
     };
     Ok(0i64)
