@@ -11,6 +11,7 @@ use aya_ebpf::{
     helpers::bpf_probe_read_user,
     helpers::bpf_probe_read,
     helpers::bpf_probe_read_kernel_str_bytes,
+    helpers::bpf_probe_read_kernel_str,
     macros::{kprobe,map},
     maps::{HashMap, Array, PerCpuArray},
     programs::ProbeContext,
@@ -185,8 +186,7 @@ fn try_vfs_write_alt(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         if (in_dir(file,*dir_inode) == 0){
             return Ok(0i64);
         }
-
-
+        
         let path = bpf_probe_read_kernel(&(*file).f_path)?;
         let dent = path.dentry;
         let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
@@ -197,7 +197,20 @@ fn try_vfs_write_alt(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
             Ok(x) => x,
         };
         let ino : u64 = bpf_probe_read_kernel(&(*inod).i_ino)?;
-        info!(ctx, "path : {}", ino);
+
+        if (dent.is_null()){
+            return Ok(0i64);
+        }
+    
+        let length: u32 = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
+        //if (length > 10){
+        //    return Ok(0i64);
+        //}
+        let mut my_str = [0u8; 8];
+        let qstring: ::aya_ebpf::cty::c_uchar = bpf_probe_read_kernel((*dent).d_name.name)?;
+        bpf_probe_read_kernel_str(&qstring, &mut my_str)?;
+
+        info!(ctx, "path : {}", my_str);
 
     };
     Ok(0i64)
