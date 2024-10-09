@@ -101,9 +101,6 @@ async fn main() -> Result<(), anyhow::Error> {
     
     //{Index, Value, Flags}
     
-
-    
-
     info!("Waiting for Ctrl-C...");
     signalRecieved();
     signal::ctrl_c().await?;
