@@ -72,22 +72,10 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
                 Ok(inode_ptr) => inode_ptr,
                 Err(_) => break, // If reading inode fails, stop traversal
             };
-            let i_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
+            let inode_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
                 Ok(inode_num) => inode_num,
                 Err(_) => break, // If reading inode number fails, stop traversal
             };
-
-            let mut inode_num : u64;
-            if (*small_inode == 1){
-                inode_num = i_num as u32 as u64;
-            } else {
-                inode_num = i_num;
-            }
-            // if (inode_num != 18446612686368067376 && inode_num != 18446612686532053264 && inode_num != 18446612686389248560 && inode_num != 18446612699420303968 && inode_num != 18446612695952264088 && inode_num != 18446612698880437376 && inode_num != 18446612698880437376 && inode_num != 18446612698880438672 && inode_num != 18446612686428750848 && inode_num != 18446612686408229552 && inode_num != 18446612698044543672 && inode_num != 18446612686370013560 && inode_num != 18446612698880433488 && inode_num != 18446612698880433488 && inode_num != 18446612699418977720 && inode_num != 18446612686428762512 && inode_num != 18446612698042823352 && inode_num != 18446612699420306560 && inode_num != 18446612699420297488 && inode_num != 18446612686428756032 && inode_num != 18446612687804570312 && inode_num != 18446612686440151336 && inode_num != 18446612695868191120 && inode_num != 18446612695416620344 && inode_num != 18446612686428759920 && inode_num != 18446612698878807584 && inode_num != 18446612699420298784 && inode_num != 18446612696801438776 && inode_num != 18446612686428752792 && inode_num != 18446612699420296840 && inode_num != 18446612699419220152 && inode_num != 18446612686428754088 && inode_num != 18446612688655885544 && inode_num != 18446612695868183992){
-            if (i == 0){
-                info!(ctx, "Inode: {} == {}", inode_num, dir_inode);
-
-            }
 
             if u64::from(inode_num) == dir_inode {
                 // Match found, we are in the directory we care about
@@ -119,7 +107,7 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         };
         
 
-        if (in_dir(file,*dir_inode, ctx) == 0){
+        if (in_dir(file,*dir_inode) == 0){
             // info!(ctx, "yeah");
             return Ok(0i64);
         }
@@ -146,12 +134,12 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         //    return Ok(0i64);
         //}
         //let mut my_str = [0u8; 8];
-        //let qstring: ::aya_ebpf::cty::c_uchar = bpf_probe_read_kernel((*dent).d_name.name)?;
+        let qstring: ::aya_ebpf::cty::c_uchar = bpf_probe_read_kernel((*dent).d_name.name)?;
         //bpf_probe_read_kernel_str(&qstring, &mut my_str)?;
         // for i in 0..length{
 
         // }
-        info!(ctx, "path : {}", length);
+        info!(ctx, "path : {}", qstring);
 
     };
     Ok(0i64)
