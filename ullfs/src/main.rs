@@ -74,12 +74,6 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         Some(x) => x,
     };
-    let small_inodes : bool = match conf["32_bit_inodes"].as_bool(){
-        None => {
-            panic!("Error: 32_bit_inodes was not a boolean value in config.json");
-        }
-        Some(x) => x
-    };
     // Debugging data
     // println!("Conf file output: {}", &watch_dir);
     // Get the metadata from the watch_dir
@@ -104,7 +98,6 @@ async fn main() -> Result<(), anyhow::Error> {
         let progid = process::id();
         let progid_64 : u64 = u64::from(progid);
         progdata.set(0, progid_64, 0)?;
-        progdata.set(1, small_inodes as u64, 0)?;
     }
     
     //{Index, Value, Flags}
