@@ -10,4 +10,5 @@ clean:
 install-aya-tool:
 	cargo install bindgen-cli
 	cargo install --git https://github.com/aya-rs/aya -- aya-tool
+	export PATH="${PATH}:${HOME}/.cargo/bin"
 
