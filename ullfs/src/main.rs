@@ -1,3 +1,4 @@
+use aya::maps::{PerCpuArray, PerfEventArray};
 use aya::programs::KProbe;
 use aya::{
     include_bytes_aligned,
@@ -97,9 +98,18 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut progdata: Array<_, u64> = Array::try_from(bpf.map_mut("PROGDATA").unwrap())?;
         let progid = process::id();
         let progid_64 : u64 = u64::from(progid);
-        progdata.set(0, progid_64, 0)?;
+        progdata.set(0, progid_64, 0)?
     }
     
+    {
+        let mut bufData: Array<_, u64> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
+        // tokio::time::sleep
+        loop { 
+            let val = bufData.get(&0, 0)?;
+
+            println!("VAL: {}", val);
+        }
+    }
     //{Index, Value, Flags}
     
     info!("Waiting for Ctrl-C...");

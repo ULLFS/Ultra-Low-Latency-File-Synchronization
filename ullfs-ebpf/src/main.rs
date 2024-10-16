@@ -17,6 +17,8 @@ use aya_ebpf::{
     programs::ProbeContext,
     
 };
+use aya_ebpf::helpers::bpf_map_update_elem;
+use core::ffi::c_void;
 use aya_log_ebpf::info;
 use core::str;
 use core::str::Bytes;
@@ -24,6 +26,8 @@ use core::mem::MaybeUninit;
 
 const MAX_BUFFER_SIZE: usize = 1024;
 
+#[map]
+pub static mut BUF: Array<u64> = Array::with_max_entries(1, 0);
 #[map] // 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32, 0);
@@ -32,13 +36,7 @@ static PROGDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32,0);
 
 
-#[repr(C)]
-pub struct Buf {
-    pub buf: [u8; 4096],
-}
 
-#[map]
-pub static mut BUF: PerCpuArray<Buf> = PerCpuArray::with_max_entries(1, 0);
 
 #[kprobe]
 fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
@@ -51,12 +49,12 @@ fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
     Ok(())
 }
 
-fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
+fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
     unsafe{
         // Read the dentry pointer from the file struct
         let dentry: *const vmlinux::dentry = match bpf_probe_read_kernel(&(*file).f_path.dentry) {
             Ok(dent) => dent,
-            Err(_) => return 0, // If reading dentry fails, return early
+            Err(_) => return false, // If reading dentry fails, return early
         };
         let mut current_dentry: *const vmlinux::dentry = dentry;
 
@@ -79,7 +77,7 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
 
             if u64::from(inode_num) == dir_inode {
                 // Match found, we are in the directory we care about
-                return 1;  // Return success
+                return true;  // Return success
             }
 
             // Move to the parent directory
@@ -90,7 +88,7 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> u32 {
 
         }
     }
-    0 // Return 0 if no match is found
+    false // Return false if no match is found
 }
 
 
@@ -107,7 +105,7 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         };
         
 
-        if (in_dir(file,*dir_inode) == 0){
+        if (!in_dir(file,*dir_inode)){
             // info!(ctx, "yeah");
             return Ok(0i64);
         }
@@ -134,17 +132,24 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         //    return Ok(0i64);
         //}
         //let mut my_str = [0u8; 8];
-        let qstring: ::aya_ebpf::cty::c_uchar = bpf_probe_read_kernel((*dent).d_name.name)?;
-        //bpf_probe_read_kernel_str(&qstring, &mut my_str)?;
-        // for i in 0..length{
-
-        // }
-        info!(ctx, "path : {}", qstring);
+        let qstring: *const ::aya_ebpf::cty::c_uchar =(*dent).d_name.name;
+        // let mut my_str : str;
+        push_value_to_array(0, 24u64, &BUF)
+        // info!(ctx, "path : {}",my_str);
 
     };
     Ok(0i64)
 }
+unsafe fn push_value_to_array<T>(index: u32, value: T, array : &Array<T>){
+    let output_data_ptr: *mut aya_ebpf::maps::Array<T> = array as *const _ as *mut aya_ebpf::maps::Array<T>;
 
+    bpf_map_update_elem(
+        output_data_ptr as *mut c_void, // Map pointer
+        &index as *const u32 as *const c_void, // Pointer to the key
+        &value as *const T as *const c_void, // Pointer to the value
+        0, // Flags
+    );
+}
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }
