@@ -27,7 +27,7 @@ use core::mem::MaybeUninit;
 const MAX_BUFFER_SIZE: usize = 1024;
 
 #[map]
-pub static mut BUF: Array<u64> = Array::with_max_entries(1, 0);
+pub static mut BUF: Array<u8> = Array::with_max_entries(256, 0);
 #[map] // 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32, 0);
@@ -107,6 +107,7 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         if (!in_dir(file,*dir_inode)){
             // info!(ctx, "yeah");
+            push_value_to_array(0, 0u8, &BUF);
             return Ok(0i64);
         }
         // info!(ctx, "Never gets here");
@@ -132,9 +133,23 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         //    return Ok(0i64);
         //}
         //let mut my_str = [0u8; 8];
-        let qstring: *const ::aya_ebpf::cty::c_uchar =(*dent).d_name.name;
+        // info!(ctx, "TEST");
+        let qstring = bpf_probe_read_kernel(&(*dent).d_name)?;
+        let name = bpf_probe_read_kernel((qstring).name as *const [u8; 256])?;
+        
+        // push_value_to_array(0, v, &BUF);
         // let mut my_str : str;
-        push_value_to_array(0, 24u64, &BUF)
+
+        push_value_to_array(0, length as u8, &BUF);
+        push_value_to_array(1, name[0], &BUF);
+        push_value_to_array(2, name[1], &BUF);
+        push_value_to_array(3, name[2], &BUF);
+        push_value_to_array(4, name[3], &BUF);
+        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
+        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
+        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
+        // push_value_to_array(0, length, &BUF);
+        
         // info!(ctx, "path : {}",my_str);
 
     };

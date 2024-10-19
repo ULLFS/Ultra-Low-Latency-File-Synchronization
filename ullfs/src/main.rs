@@ -102,12 +102,18 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     
     {
-        let mut bufData: Array<_, u64> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
+        let mut bufData: Array<_, u8> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
         // tokio::time::sleep
         loop { 
-            let val = bufData.get(&0, 0)?;
-
-            println!("VAL: {}", val);
+            let len = bufData.get(&0, 0)?;
+            if len != 0{
+                for i in 0..len{
+                    let val = bufData.get(&((i+1) as u32), 0)?;
+                    println!("Char {}: {}", i + 1, val);
+                }
+            }
+            
+            
         }
     }
     //{Index, Value, Flags}
