@@ -91,6 +91,110 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
     false // Return false if no match is found
 }
 
+//Does not put data in index 0 due to that being reserved for length rn
+unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8> ,arrayOffset: u32) -> u32 {
+    let mut end:bool = false;
+    for n in 0..4{
+        //Limit scope bc name is 64 bytes
+        {
+            //let length = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
+            //I can't figure out why length doesn't work it just throws registers
+            let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
+                Ok(q) => q,
+                Err(_) => return 0, // Return 0 if there's an error
+            };
+
+            let offset: usize = n * 64;
+
+            let name: [u8; 64] = match bpf_probe_read_kernel((((qstring).name).add(offset) as *const u8 as *const [u8; 64])) {
+                Ok(n) => n,
+                Err(_) => return 0, // Return 0 if there's an error
+            };
+            //With [u8,128] it gives 2 calls stack is 544 too large
+    
+            let mut getLen: u32 = 0;
+            for i in 0..64 {
+                getLen += 1;
+                if name[i] == 0 {
+                    end = true;
+                    break;
+                }
+            }
+
+            for i in 0..getLen{
+                push_value_to_array(((n*64) + (1 + arrayOffset) as usize + i as usize) as u32, name[i as usize], &array);
+            }
+            //The length for printing on user size
+            if end {
+                //push_value_to_array(0, ((n*64)+getLen as usize) as u8, &array);
+                return ((n*64)+getLen as usize) as u32;
+            }
+        }
+        if end{
+            break;
+        }
+    }
+    return 0u32
+}
+
+unsafe fn getDentryDepth(dent: *const vmlinux::dentry) -> u8 {
+    let mut depth: u8 = 0; // Initialize depth to 0
+    let mut current_dentry: *const vmlinux::dentry = dent;
+
+    // Loop for a maximum of MAX_DEPTH iterations
+    for i in 0..10 {
+        if current_dentry.is_null() {
+            return i; // Stop if we've reached the root or a null pointer
+        }
+
+        // Check if the current dentry's inode matches the directory inode from inodedir map
+        let inode: *const vmlinux::inode = match bpf_probe_read_kernel(&(*current_dentry).d_inode) {
+            Ok(inode_ptr) => inode_ptr,
+            Err(_) => break, // If reading inode fails, stop traversal
+        };
+        let inode_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
+            Ok(inode_num) => inode_num,
+            Err(_) => break, // If reading inode number fails, stop traversal
+        };
+        if inode_num == 2 {
+            // Match found, we are in the directory we care about
+            return i;  // Return success
+        }
+
+        // Read the parent dentry
+        current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
+            Ok(parent) => parent,
+            Err(_) => break, // If reading parent fails, stop traversal
+        };
+
+        // Increment depth
+        depth += 1;
+    }
+
+    // Return the depth
+    depth
+}
+
+unsafe fn pathToBuffer(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -> bool{
+    let mut fullLength = 0;
+        
+    let mut current_dentry: *const vmlinux::dentry = dent;
+    for i in 0..depth {
+        if current_dentry.is_null() {
+            break;
+        }
+        let len = dnameToMap(current_dentry,&BUF,fullLength);
+        fullLength += len-1;
+
+        current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
+            Ok(parent) => parent,
+            Err(_) => break, // If reading parent fails, stop traversal
+        };
+    }
+    push_value_to_array(0, fullLength as u8, &BUF);
+    return true;
+}
+
 
 fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
     unsafe {
@@ -127,24 +231,36 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         if (dent.is_null()){
             return Ok(0i64);
         }
-    
-        let length: u32 = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
+        
+        //info!(ctx, "Error on d_inode {}", 2);
         //if (length > 10){
         //    return Ok(0i64);
         //}
         //let mut my_str = [0u8; 8];
         // info!(ctx, "TEST");
-        let qstring = bpf_probe_read_kernel(&(*dent).d_name)?;
-        let name = bpf_probe_read_kernel((qstring).name as *const [u8; 256])?;
         
-        // push_value_to_array(0, v, &BUF);
-        // let mut my_str : str;
+        //this get's the depth but if added to pathToBuffer it causes the compiler to precompute
+        //  too many instructions
+        //let depth:u8 = getDentryDepth(dent);
 
-        push_value_to_array(0, length as u8, &BUF);
-        push_value_to_array(1, name[0], &BUF);
-        push_value_to_array(2, name[1], &BUF);
-        push_value_to_array(3, name[2], &BUF);
-        push_value_to_array(4, name[3], &BUF);
+        //let capped_depth = if depth > 4 { 4 } else { depth };
+
+        //push_value_to_array(0, depth, &BUF);
+        
+        //if depth is more than steps to root it breaks
+        //  and I cannot use a variable because that makes it
+        //  calculate over a million instructions and it breaks
+        pathToBuffer(dent,&BUF,3);
+        
+        /*for i in 1..(length - 1){
+            if name == 0 {
+
+            }
+            push_value_to_array(i, name[i as usize], &BUF);
+        }*/
+        //push_value_to_array(2, name[1], &BUF);
+        //push_value_to_array(3, name[2], &BUF);
+        //push_value_to_array(4, name[3], &BUF);
         // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
         // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
         // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
@@ -155,7 +271,8 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
     };
     Ok(0i64)
 }
-unsafe fn push_value_to_array<T>(index: u32, value: T, array : &Array<T>){
+
+unsafe fn push_value_to_array<T:Copy>(index: u32, value: T, array : &Array<T>){
     let output_data_ptr: *mut aya_ebpf::maps::Array<T> = array as *const _ as *mut aya_ebpf::maps::Array<T>;
 
     bpf_map_update_elem(

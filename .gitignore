@@ -9,4 +9,4 @@ target/
 **/*.rs.bk
 .vim
 .vscode
-ullfs-ebpf/vmlinux.rs
+ullfs-ebpf/src/vmlinux.rs
