@@ -107,7 +107,7 @@ async fn main() -> Result<(), anyhow::Error> {
         loop { 
             let len = bufData.get(&0, 0)?;
             if len != 0{
-                for i in 0..=len{
+                for i in 0..len{
                     let val: u8 = bufData.get(&(i as u32), 0)?;
                     if(i == 0){
                         println!("Length {}: {}", i, val);
@@ -118,7 +118,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
                 // Builds string out of characters
                 let mut filename = String::new();
-                for i in 1..=len {
+                for i in 1..len {
                     let val: u8 = bufData.get(&(i as u32), 0)?;
                     if val == 0{
                         filename.push(100 as char); // d for empty spaces for debugging
@@ -128,8 +128,15 @@ async fn main() -> Result<(), anyhow::Error> {
                         filename.push(val as char); // Convert u8 to char and push to String
                     }
                 }
+                let file_dir = filename.split("/");
                 
-                println!("Filename: {}", filename);
+                let corrected_path: String = filename
+                    .split('/')
+                    .rev()
+                    .collect::<Vec<&str>>()
+                    .join("/");
+                
+                println!("Filename: {}", corrected_path);
                 }
         }
     }

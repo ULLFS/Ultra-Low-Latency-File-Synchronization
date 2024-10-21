@@ -27,7 +27,7 @@ use core::mem::MaybeUninit;
 const MAX_BUFFER_SIZE: usize = 1024;
 
 #[map]
-pub static mut BUF: Array<u8> = Array::with_max_entries(256, 0);
+pub static mut BUF: Array<u8> = Array::with_max_entries(4096, 0);
 #[map] // 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32, 0);
@@ -105,16 +105,18 @@ unsafe fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
 unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset: u32) -> u32 {
     
     let mut end:bool = false;
+    let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
+                Ok(q) => q,
+                Err(_) => return 0,
+            };
+    let mut msgLen = qstring.__bindgen_anon_1.__bindgen_anon_1.len;
     for n in 0..4{
         //Limit scope bc name is 64 bytes
         {
             let offset: u32 = n * 64;
             
             //Get qstr name data
-            let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
-                Ok(q) => q,
-                Err(_) => return 0,
-            };
+            
             
                 //With [u8,128] it gives 2 calls stack is 544 too large
             let name: [u8; 64] = match bpf_probe_read_kernel((((qstring).name).add(offset as usize) as *const [u8; 64])) {
@@ -122,40 +124,32 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
                 Err(_) => return 0,
             };
             
-            
-            //Manually calculates length
-                //I can't figure out why length doesn't work it just throws registers
-            let msgLen = qstring.__bindgen_anon_1.__bindgen_anon_1.len;
+        
             //Limit msgLen
-            if msgLen > 64{
-                return 0;
-            }
-
-            if msgLen < 64{
+            // if msgLen - (4 - n) * 64> 64{
+            //     return 0;
+            // }
+            
+            if msgLen > n * 64{
                 end = true;
             }
-            //let mut msgLen: u32 = 0;
-            /*for i in 0..64 {
-                msgLen += 1;
-                if name[i] == 0 {
-                    end = true;
+
+            for i in 0..64{
+                if i + n * 64 >= msgLen {
                     break;
                 }
-            }*/
-
-            for i in 0..msgLen{
-                push_value_to_array(offset + arrayOffset + i, name[i as usize], &array);
+                push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
             }
-
+            
             //return length
-            if end {
-                return (offset + msgLen);
-            }
         }
         if end{
+            return (n * 64 + msgLen);
+
             break;
         }
     }
+
     return 0u32
 }
 
