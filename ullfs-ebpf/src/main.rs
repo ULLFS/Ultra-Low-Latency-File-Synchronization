@@ -130,8 +130,8 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
             if msgLen > 64{
                 return 0;
             }
-            
-            if name[63] == 0{
+
+            if msgLen < 64{
                 end = true;
             }
             //let mut msgLen: u32 = 0;
@@ -170,13 +170,31 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -
         if current_dentry.is_null() {
             break;
         }
+        
+        // Check if the current dentry's inode matches the directory inode from inodedir map
+        let inode: *const vmlinux::inode = match bpf_probe_read_kernel(&(*current_dentry).d_inode) {
+            Ok(inode_ptr) => inode_ptr,
+            Err(_) => break, // If reading inode fails, stop traversal
+        };
 
+        let inode_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
+            Ok(inode_num) => inode_num,
+            Err(_) => break, // If reading inode number fails, stop traversal
+        };
 
+        
+        
+        
         //Updates map then offsets position in map by "len"
         let len = dnameToMap(current_dentry,&array,fullLength);
-        fullLength += (len-1);
+        fullLength += len;
         //
-
+        
+        if u64::from(inode_num) == 2 {
+            // Match found, we are in the directory we care about
+            //push_value_to_array(0, (fullLength-1) as u8, &BUF);
+            break;  // Return success
+        }
 
         current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
             Ok(parent) => parent,
@@ -228,13 +246,13 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         /* dnameToMap() Example */
         //Get's current denty name with offset of 1
-        let msgLen = dnameToMap(dent,&BUF,1);
+        //let msgLen = dnameToMap(dent,&BUF,1);
         //Pushes length to 0 Index of buffer for displaying on userside
-        push_value_to_array(0, (msgLen-1) as u8, &BUF);
+        //push_value_to_array(0, msgLen as u8, &BUF);
 
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        //pathToMap(dent,&BUF,50);
+        pathToMap(dent,&BUF,50);
 
     };
     Ok(0i64)
