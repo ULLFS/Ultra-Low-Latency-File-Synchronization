@@ -49,7 +49,9 @@ fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
     Ok(())
 }
 
-fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
+unsafe fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
+    //let mut fullLength = 1;
+    //
     unsafe{
         // Read the dentry pointer from the file struct
         let dentry: *const vmlinux::dentry = match bpf_probe_read_kernel(&(*file).f_path.dentry) {
@@ -75,8 +77,14 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
                 Err(_) => break, // If reading inode number fails, stop traversal
             };
 
+            //Updates map then offsets position in map by "len"
+            //let len = dnameToMap(current_dentry,&BUF,fullLength);
+            //fullLength += (len-1);
+            //
+
             if u64::from(inode_num) == dir_inode {
                 // Match found, we are in the directory we care about
+                //push_value_to_array(0, (fullLength-1) as u8, &BUF);
                 return true;  // Return success
             }
 
@@ -88,6 +96,8 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
 
         }
     }
+
+    //push_value_to_array(0, (fullLength-1) as u8, &BUF);
     false // Return false if no match is found
 }
 
@@ -115,17 +125,24 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
             
             //Manually calculates length
                 //I can't figure out why length doesn't work it just throws registers
-                //let length = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
-            let mut msgLen: u32 = 0;
-            for i in 0..64 {
+            let msgLen = qstring.__bindgen_anon_1.__bindgen_anon_1.len;
+            //Limit msgLen
+            if msgLen > 64{
+                return 0;
+            }
+            
+            if name[63] == 0{
+                end = true;
+            }
+            //let mut msgLen: u32 = 0;
+            /*for i in 0..64 {
                 msgLen += 1;
                 if name[i] == 0 {
                     end = true;
                     break;
                 }
-            }
+            }*/
 
-            //Push data to map
             for i in 0..msgLen{
                 push_value_to_array(offset + arrayOffset + i, name[i as usize], &array);
             }
@@ -217,7 +234,7 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        //pathToMap(dent,&BUF,3);
+        //pathToMap(dent,&BUF,50);
 
     };
     Ok(0i64)
