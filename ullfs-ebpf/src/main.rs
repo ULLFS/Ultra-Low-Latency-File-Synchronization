@@ -252,20 +252,20 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         pathToMap(dent,&BUF,50);
         // let val = bpf_send_signal(2); // This kill your EDITOR for some reason
         // info!(ctx, "Signal Val: {}", val);
-        let pid: i32 = match PROGDATA.get(0){
-            Some (x) => *x as i32,
-            None => {
-                panic!("No progdata at 0 found");
-            }
-        }; // Replace with the target PID
-        let signal: i32 = 10; // SIGUSR1
-        asm!(
-            "syscall",
-            inout("rax") 62 => _,  // syscall number for kill
-            in("rdi") pid,    // first argument: pid
-            in("rsi") signal, // second argument: signal
-            options(nostack),
-        );
+        // let pid: i32 = match PROGDATA.get(0){
+        //     Some (x) => *x as i32,
+        //     None => {
+        //         panic!("No progdata at 0 found");
+        //     }
+        // }; // Replace with the target PID
+        // let signal: i32 = 10; // SIGUSR1
+        // asm!(
+        //     "syscall",
+        //     inout("rax") 62 => _,  // syscall number for kill
+        //     in("rdi") pid,    // first argument: pid
+        //     in("rsi") signal, // second argument: signal
+        //     options(nostack),
+        // );
         
         
     };
