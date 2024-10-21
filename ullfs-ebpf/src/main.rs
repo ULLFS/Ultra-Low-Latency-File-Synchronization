@@ -181,20 +181,24 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -
             Ok(inode_num) => inode_num,
             Err(_) => break, // If reading inode number fails, stop traversal
         };
-
-        
-        
-        
-        //Updates map then offsets position in map by "len"
-        let len = dnameToMap(current_dentry,&array,fullLength);
-        fullLength += len;
-        //
         
         if u64::from(inode_num) == 2 {
             // Match found, we are in the directory we care about
             //push_value_to_array(0, (fullLength-1) as u8, &BUF);
             break;  // Return success
         }
+
+        //Updates map then offsets position in map by "len"
+        let len = dnameToMap(current_dentry,&array,fullLength);
+        fullLength += len;
+
+        //Add slash
+        push_value_to_array(fullLength, 47 as u8, &array);
+        fullLength += 1;
+        
+        //47 as u8;
+        //
+        
 
         current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
             Ok(parent) => parent,
