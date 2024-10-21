@@ -124,12 +124,6 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
                 Err(_) => return 0,
             };
             
-        
-            //Limit msgLen
-            // if msgLen - (4 - n) * 64> 64{
-            //     return 0;
-            // }
-            
             if msgLen < (n + 1) * 64{
                 end = true;
             }

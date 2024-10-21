@@ -14,12 +14,14 @@ use std::os::linux::raw;
 use std::process;
 use std::io::BufReader;
 use serde_json::{self, Value};
+use std::{error::Error, thread};
+use signal_hook::{consts::SIGUSR1, iterator::Signals};
+
 async fn signalRecieved() -> Result<(), anyhow::Error>{
 
     Ok(())
 }
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
@@ -45,10 +47,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/ullfs"
     ))?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
-        // This can happen if you remove all log statements from your eBPF program.
-        warn!("failed to initialize eBPF logger: {}", e);
-    }
+    // if let Err(e) = BpfLogger::init(&mut bpf) {
+    //     // This can happen if you remove all log statements from your eBPF program.
+    //     warn!("failed to initialize eBPF logger: {}", e);
+    // }
     let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
     program.load()?;
     program.attach("vfs_write", 0)?;
@@ -102,50 +104,61 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     
     {
-        let mut bufData: Array<_, u8> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
+        let bufData: Array<_, u8> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
         // tokio::time::sleep
-        loop { 
-            let len = bufData.get(&0, 0)?;
-            if len != 0{
-                for i in 0..len{
-                    let val: u8 = bufData.get(&(i as u32), 0)?;
-                    if(i == 0){
-                        println!("Length {}: {}", i, val);
+        let mut signals = Signals::new(&[SIGUSR1])?;
+        thread::spawn(move || {
+            
+            for _sig in signals.forever() {
+                let len = match bufData.get(&0, 0) {
+                    Ok(x) => x,
+                    Err(_) => 0,
+                };
+                if len != 0{
+                    for i in 0..len{
+                        let val: u8 = match bufData.get(&(i as u32), 0){
+                            Ok(x) => x,
+                            Err(_) => 0,
+                        };
+                        if i == 0 {
+                            println!("Length {}: {}", i, val);
+                        }
+                        //else{
+                        //    println!("Char {}: {}", i, val as char);
+                        //}
                     }
-                    //else{
-                    //    println!("Char {}: {}", i, val as char);
-                    //}
-                }
-                // Builds string out of characters
-                let mut filename = String::new();
-                for i in 1..len {
-                    let val: u8 = bufData.get(&(i as u32), 0)?;
-                    if val == 0{
-                        filename.push(100 as char); // d for empty spaces for debugging
-                    }
-                    else{
+                    // Builds string out of characters
+                    let mut filename = String::new();
+                    for i in 1..len {
+                        let val: u8 = match bufData.get(&(i as u32), 0){
+                            Ok(x) => x,
+                            Err(_) => 0,
+                        };
+                        if val == 0{
+                            filename.push(166 as char); // ¦ for empty spaces for debugging
+                        }
+                        else{
 
-                        filename.push(val as char); // Convert u8 to char and push to String
+                            filename.push(val as char); // Convert u8 to char and push to String
+                        }
                     }
-                }
-                let file_dir = filename.split("/");
-                
-                let corrected_path: String = filename
-                    .split('/')
-                    .rev()
-                    .collect::<Vec<&str>>()
-                    .join("/");
-                
-                println!("Filename: {}", corrected_path);
-                }
-        }
+                    let file_dir = filename.split("/");
+                    
+                    let corrected_path: String = filename
+                        .split('/')
+                        .rev()
+                        .collect::<Vec<&str>>()
+                        .join("/");
+                    
+                    println!("Filename: {}", corrected_path);
+                }   
+            }
+            
+        });
+            
     }
     //{Index, Value, Flags}
     
-    info!("Waiting for Ctrl-C...");
-
-    signal::ctrl_c().await?;
-    info!("Exiting...");
 
     Ok(())
 }
