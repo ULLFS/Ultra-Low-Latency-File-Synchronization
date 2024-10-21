@@ -103,7 +103,6 @@ async fn main() -> Result<(), anyhow::Error> {
     
     {
         let mut bufData: Array<_, u8> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
-        let mut pathDebug: bool = false;
         // tokio::time::sleep
         loop { 
             let len = bufData.get(&0, 0)?;
@@ -113,24 +112,23 @@ async fn main() -> Result<(), anyhow::Error> {
                     if(i == 0){
                         println!("Length {}: {}", i, val);
                     }
-                    else if (pathDebug){
-                        println!("Char {}: {}", i, val as char);
-                    }
+                    //else{
+                    //    println!("Char {}: {}", i, val as char);
+                    //}
                 }
-                // Build the string in this loop
-                let mut filename = String::new(); // Initialize a new String
+                // Builds string out of characters
+                let mut filename = String::new();
                 for i in 1..=len {
                     let val: u8 = bufData.get(&(i as u32), 0)?;
                     if val == 0{
-                        filename.push(100 as char); // Convert u8 to char and push to String
+                        filename.push(100 as char); // d for empty spaces for debugging
                     }
                     else{
 
                         filename.push(val as char); // Convert u8 to char and push to String
                     }
                 }
-
-                // Print the built filename
+                
                 println!("Filename: {}", filename);
                 }
         }

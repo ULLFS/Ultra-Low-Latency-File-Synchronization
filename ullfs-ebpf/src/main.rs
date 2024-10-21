@@ -91,43 +91,48 @@ fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
     false // Return false if no match is found
 }
 
-//Does not put data in index 0 due to that being reserved for length rn
-unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8> ,arrayOffset: u32) -> u32 {
+//fills BUFFER at arrayOffset with characters in d_name.name
+unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset: u32) -> u32 {
+    
     let mut end:bool = false;
     for n in 0..4{
         //Limit scope bc name is 64 bytes
         {
-            //let length = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
-            //I can't figure out why length doesn't work it just throws registers
+            let offset: u32 = n * 64;
+            
+            //Get qstr name data
             let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
                 Ok(q) => q,
-                Err(_) => return 0, // Return 0 if there's an error
+                Err(_) => return 0,
             };
-
-            let offset: usize = n * 64;
-
-            let name: [u8; 64] = match bpf_probe_read_kernel((((qstring).name).add(offset) as *const u8 as *const [u8; 64])) {
+            
+                //With [u8,128] it gives 2 calls stack is 544 too large
+            let name: [u8; 64] = match bpf_probe_read_kernel((((qstring).name).add(offset as usize) as *const [u8; 64])) {
                 Ok(n) => n,
-                Err(_) => return 0, // Return 0 if there's an error
+                Err(_) => return 0,
             };
-            //With [u8,128] it gives 2 calls stack is 544 too large
-    
-            let mut getLen: u32 = 0;
+            
+            
+            //Manually calculates length
+                //I can't figure out why length doesn't work it just throws registers
+                //let length = bpf_probe_read_kernel(&(*dent).d_name.__bindgen_anon_1.__bindgen_anon_1.len)?;
+            let mut msgLen: u32 = 0;
             for i in 0..64 {
-                getLen += 1;
+                msgLen += 1;
                 if name[i] == 0 {
                     end = true;
                     break;
                 }
             }
 
-            for i in 0..getLen{
-                push_value_to_array(((n*64) + (1 + arrayOffset) as usize + i as usize) as u32, name[i as usize], &array);
+            //Push data to map
+            for i in 0..msgLen{
+                push_value_to_array(offset + arrayOffset + i, name[i as usize], &array);
             }
-            //The length for printing on user size
+
+            //return length
             if end {
-                //push_value_to_array(0, ((n*64)+getLen as usize) as u8, &array);
-                return ((n*64)+getLen as usize) as u32;
+                return (offset + msgLen);
             }
         }
         if end{
@@ -137,61 +142,33 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8> ,arrayOffset
     return 0u32
 }
 
-unsafe fn getDentryDepth(dent: *const vmlinux::dentry) -> u8 {
-    let mut depth: u8 = 0; // Initialize depth to 0
-    let mut current_dentry: *const vmlinux::dentry = dent;
-
-    // Loop for a maximum of MAX_DEPTH iterations
-    for i in 0..10 {
-        if current_dentry.is_null() {
-            return i; // Stop if we've reached the root or a null pointer
-        }
-
-        // Check if the current dentry's inode matches the directory inode from inodedir map
-        let inode: *const vmlinux::inode = match bpf_probe_read_kernel(&(*current_dentry).d_inode) {
-            Ok(inode_ptr) => inode_ptr,
-            Err(_) => break, // If reading inode fails, stop traversal
-        };
-        let inode_num: u64 = match bpf_probe_read_kernel(&(*inode).i_ino) {
-            Ok(inode_num) => inode_num,
-            Err(_) => break, // If reading inode number fails, stop traversal
-        };
-        if inode_num == 2 {
-            // Match found, we are in the directory we care about
-            return i;  // Return success
-        }
-
-        // Read the parent dentry
-        current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
-            Ok(parent) => parent,
-            Err(_) => break, // If reading parent fails, stop traversal
-        };
-
-        // Increment depth
-        depth += 1;
-    }
-
-    // Return the depth
-    depth
-}
-
-unsafe fn pathToBuffer(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -> bool{
-    let mut fullLength = 0;
-        
+//Just runs dnameToMap n times to get dnames up the directory
+//This function is assumes the first element in buffer is length so if that changes it would need updating
+unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -> bool{
+    let mut fullLength = 1;
+    
+    //This loops just mimics in_dir to search up directories
     let mut current_dentry: *const vmlinux::dentry = dent;
     for i in 0..depth {
         if current_dentry.is_null() {
             break;
         }
-        let len = dnameToMap(current_dentry,&BUF,fullLength);
-        fullLength += len-1;
+
+
+        //Updates map then offsets position in map by "len"
+        let len = dnameToMap(current_dentry,&array,fullLength);
+        fullLength += (len-1);
+        //
+
 
         current_dentry = match bpf_probe_read_kernel(&(*current_dentry).d_parent) {
             Ok(parent) => parent,
             Err(_) => break, // If reading parent fails, stop traversal
         };
     }
-    push_value_to_array(0, fullLength as u8, &BUF);
+
+    //Pushes final length to array
+    push_value_to_array(0, (fullLength-1) as u8, &array);
     return true;
 }
 
@@ -216,7 +193,6 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         }
         // info!(ctx, "Never gets here");
 
-        
         let path = bpf_probe_read_kernel(&(*file).f_path)?;
         let dent = path.dentry;
         let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
@@ -231,42 +207,17 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         if (dent.is_null()){
             return Ok(0i64);
         }
-        
-        //info!(ctx, "Error on d_inode {}", 2);
-        //if (length > 10){
-        //    return Ok(0i64);
-        //}
-        //let mut my_str = [0u8; 8];
-        // info!(ctx, "TEST");
-        
-        //this get's the depth but if added to pathToBuffer it causes the compiler to precompute
-        //  too many instructions
-        //let depth:u8 = getDentryDepth(dent);
 
-        //let capped_depth = if depth > 4 { 4 } else { depth };
 
-        //push_value_to_array(0, depth, &BUF);
-        
-        //if depth is more than steps to root it breaks
-        //  and I cannot use a variable because that makes it
-        //  calculate over a million instructions and it breaks
-        pathToBuffer(dent,&BUF,3);
-        
-        /*for i in 1..(length - 1){
-            if name == 0 {
+        /* dnameToMap() Example */
+        //Get's current denty name with offset of 1
+        let msgLen = dnameToMap(dent,&BUF,1);
+        //Pushes length to 0 Index of buffer for displaying on userside
+        push_value_to_array(0, (msgLen-1) as u8, &BUF);
 
-            }
-            push_value_to_array(i, name[i as usize], &BUF);
-        }*/
-        //push_value_to_array(2, name[1], &BUF);
-        //push_value_to_array(3, name[2], &BUF);
-        //push_value_to_array(4, name[3], &BUF);
-        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
-        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
-        // push_value_to_array(i + 1, name[(i + 1) as usize], &BUF);
-        // push_value_to_array(0, length, &BUF);
-        
-        // info!(ctx, "path : {}",my_str);
+        /* pathToMap() Example */
+        //Run's dnameToMap to depth 3 
+        //pathToMap(dent,&BUF,3);
 
     };
     Ok(0i64)
