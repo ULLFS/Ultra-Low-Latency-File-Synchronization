@@ -6,6 +6,7 @@ use aya::{
     maps::{HashMap,Array},
 };
 use aya_log::BpfLogger;
+use libc::SIGINT;
 use log::{info, warn, debug};
 use tokio::signal::unix::{signal,SignalKind};
 use tokio::signal;
@@ -21,7 +22,8 @@ async fn signalRecieved() -> Result<(), anyhow::Error>{
 
     Ok(())
 }
-fn main() -> Result<(), anyhow::Error> {
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
@@ -47,10 +49,10 @@ fn main() -> Result<(), anyhow::Error> {
     let mut bpf = Bpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/ullfs"
     ))?;
-    // if let Err(e) = BpfLogger::init(&mut bpf) {
-    //     // This can happen if you remove all log statements from your eBPF program.
-    //     warn!("failed to initialize eBPF logger: {}", e);
-    // }
+    if let Err(e) = BpfLogger::init(&mut bpf) {
+        // This can happen if you remove all log statements from your eBPF program.
+        warn!("failed to initialize eBPF logger: {}", e);
+    }
     let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
     program.load()?;
     program.attach("vfs_write", 0)?;
@@ -104,11 +106,17 @@ fn main() -> Result<(), anyhow::Error> {
     }
     
     {
-        let bufData: Array<_, u8> = Array::try_from(bpf.map_mut("BUF").unwrap())?;
+        // l
         // tokio::time::sleep
-        let mut signals = Signals::new(&[SIGUSR1])?;
+        let mut signals = Signals::new(&[10])?;
+        
         thread::spawn(move || {
-            
+            let bufData: Array<_, u8> = match Array::try_from(bpf.map_mut("BUF").unwrap()){
+                Ok(x) => x,
+                Err(_) => {
+                    panic!("Error: Bufdata not set up properly");
+                }
+            };
             for _sig in signals.forever() {
                 let len = match bufData.get(&0, 0) {
                     Ok(x) => x,
@@ -151,13 +159,18 @@ fn main() -> Result<(), anyhow::Error> {
                         .join("/");
                     
                     println!("Filename: {}", corrected_path);
-                }   
+                } else {
+                    println!("Empty");
+                }
             }
             
         });
             
     }
     //{Index, Value, Flags}
+    loop {
+
+    }
     
 
     Ok(())

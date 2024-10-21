@@ -12,6 +12,7 @@ use aya_ebpf::{
     helpers::bpf_probe_read,
     helpers::bpf_probe_read_kernel_str_bytes,
     helpers::bpf_probe_read_kernel_str,
+    helpers::gen::bpf_send_signal,
     macros::{kprobe,map},
     maps::{HashMap, Array, PerCpuArray},
     programs::ProbeContext,
@@ -247,7 +248,8 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
         pathToMap(dent,&BUF,50);
-
+        let val = bpf_send_signal(2);
+        info!(ctx, "Signal Val: {}", val);
     };
     Ok(0i64)
 }
