@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(warnings)]
-
+#![feature(asm_experimental_arch)]
 mod vmlinux;
 
 use vmlinux::{file, inode, path, vfsmount, dentry, qstr};
@@ -18,8 +18,10 @@ use aya_ebpf::{
     programs::ProbeContext,
     
 };
+
 use aya_ebpf::helpers::bpf_map_update_elem;
 use core::ffi::c_void;
+use core::arch::asm;
 use aya_log_ebpf::info;
 use core::str;
 use core::str::Bytes;
@@ -248,8 +250,24 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
         pathToMap(dent,&BUF,50);
-        let val = bpf_send_signal(2);
-        info!(ctx, "Signal Val: {}", val);
+        // let val = bpf_send_signal(2); // This kill your EDITOR for some reason
+        // info!(ctx, "Signal Val: {}", val);
+        let pid: i32 = match PROGDATA.get(0){
+            Some (x) => *x as i32,
+            None => {
+                panic!("No progdata at 0 found");
+            }
+        }; // Replace with the target PID
+        let signal: i32 = 10; // SIGUSR1
+        asm!(
+            "syscall",
+            inout("rax") 62 => _,  // syscall number for kill
+            in("rdi") pid,    // first argument: pid
+            in("rsi") signal, // second argument: signal
+            options(nostack),
+        );
+        
+        
     };
     Ok(0i64)
 }
