@@ -1,5 +1,7 @@
 use aya::maps::{PerCpuArray, PerfEventArray};
 use aya::programs::KProbe;
+use aya::util::online_cpus;
+use aya::Ebpf;
 use aya::{
     include_bytes_aligned,
     Bpf,
@@ -15,9 +17,11 @@ use std::os::linux::raw;
 use std::process;
 use std::io::BufReader;
 use serde_json::{self, Value};
+use aya::maps::AsyncPerfEventArray;
 use std::{error::Error, thread};
 use signal_hook::{consts::SIGUSR1, iterator::Signals};
-
+use bytes::BytesMut;
+use tokio::task; // or async_std::task
 async fn signalRecieved() -> Result<(), anyhow::Error>{
 
     Ok(())
@@ -42,17 +46,17 @@ async fn main() -> Result<(), anyhow::Error> {
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Bpf::load_file` instead.
     #[cfg(debug_assertions)]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
+    let mut bpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/ullfs"
     ))?;
     #[cfg(not(debug_assertions))]
-    let mut bpf = Bpf::load(include_bytes_aligned!(
+    let mut bpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/ullfs"
     ))?;
-    if let Err(e) = BpfLogger::init(&mut bpf) {
-        // This can happen if you remove all log statements from your eBPF program.
-        warn!("failed to initialize eBPF logger: {}", e);
-    }
+    // if let Err(e) = BpfLogger::init(&mut bpf) {
+    //     // This can happen if you remove all log statements from your eBPF program.
+    //     warn!("failed to initialize eBPF logger: {}", e);
+    // }
     let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
     program.load()?;
     program.attach("vfs_write", 0)?;
@@ -93,13 +97,13 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("Block Address: {}", block_addr);
     {
         // Initialize the inode map
-        let mut inodesdata: Array<_, u64> = Array::try_from(bpf.map_mut("INODEDATA").unwrap())?;
+        let mut inodesdata: Array<_, u64> = Array::try_from(bpf.take_map("INODEDATA").unwrap())?;
         inodesdata.set(0, block_addr, 0)?;
     }
     {
         // Initialize the program data map
         // ID 0: PID for this program
-        let mut progdata: Array<_, u64> = Array::try_from(bpf.map_mut("PROGDATA").unwrap())?;
+        let mut progdata: Array<_, u64> = Array::try_from(bpf.take_map("PROGDATA").unwrap())?;
         let progid = process::id();
         let progid_64 : u64 = u64::from(progid);
         progdata.set(0, progid_64, 0)?
@@ -108,59 +112,95 @@ async fn main() -> Result<(), anyhow::Error> {
     {
         // l
         // tokio::time::sleep
-        let mut signals = Signals::new(&[10])?;
-        let bufData: Array<_, u8> = match Array::try_from(bpf.map_mut("BUF").unwrap()){
-            Ok(x) => x,
-            Err(_) => {
-                panic!("Error: Bufdata not set up properly");
-            }
-        };
-        loop {
-            let len = match bufData.get(&0, 0) {
-                Ok(x) => x,
-                Err(_) => 0,
-            };
-            if len != 0{
-                for i in 0..len{
-                    let val: u8 = match bufData.get(&(i as u32), 0){
+        
+        let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
+        
+        for cpu_id in online_cpus().map_err(|(_, error)| error)? {
+            // open a separate perf buffer for each cpu
+            let mut buf = perf_array.open(cpu_id, None)?;
+            // let bufData: Array<_, u8> = match Array::try_from(bpf.take_map("BUF").unwrap()){
+            //     Ok(x) => x,
+            //     Err(_) => {
+            //         panic!("Error: Bufdata not set up properly");
+            //     }
+            // };
+            // process each perf buffer in a separate task
+            task::spawn(async move {
+                let mut buffers = (0..10)
+                    .map(|_| BytesMut::with_capacity(1024))
+                    .collect::<Vec<_>>();
+                
+                loop {
+                    
+                    // wait for events
+                    let event = match buf.read_events(&mut buffers).await {
                         Ok(x) => x,
-                        Err(_) => 0,
+                        Err(_) => {
+                            panic!("Buffer read events bad somehow");
+                        }
                     };
-                    if i == 0 {
-                        println!("Length {}: {}", i, val);
-                    }
-                    //else{
-                    //    println!("Char {}: {}", i, val as char);
-                    //}
-                }
-                // Builds string out of characters
-                let mut filename = String::new();
-                for i in 1..len {
-                    let val: u8 = match bufData.get(&(i as u32), 0){
-                        Ok(x) => x,
-                        Err(_) => 0,
-                    };
-                    if val == 0{
-                        filename.push(166 as char); // ¦ for empty spaces for debugging
-                    }
-                    else{
+                    for i in 0..event.read {
+                        let buf = &mut buffers[i];
+                        let val = match buf.get(0){
+                            Some(x) => x,
+                            None => &0,
+                        };
+                        println!("Event received {}", val);
 
-                        filename.push(val as char); // Convert u8 to char and push to String
                     }
+
+                    
                 }
-                let file_dir = filename.split("/");
-                
-                let corrected_path: String = filename
-                    .split('/')
-                    .rev()
-                    .collect::<Vec<&str>>()
-                    .join("/");
-                
-                println!("Filename: {}", corrected_path);
-            } else {
-                // println!("Empty");
-            }
+
+                // Ok::<_, PerfBufferError>(())
+            });
         }
+        // loop {
+        //     let len = match bufData.get(&0, 0) {
+        //         Ok(x) => x,
+        //         Err(_) => 0,
+        //     };
+        //     if len != 0{
+        //         for i in 0..len{
+        //             let val: u8 = match bufData.get(&(i as u32), 0){
+        //                 Ok(x) => x,
+        //                 Err(_) => 0,
+        //             };
+        //             if i == 0 {
+        //                 println!("Length {}: {}", i, val);
+        //             }
+        //             //else{
+        //             //    println!("Char {}: {}", i, val as char);
+        //             //}
+        //         }
+        //         // Builds string out of characters
+        //         let mut filename = String::new();
+        //         for i in 1..len {
+        //             let val: u8 = match bufData.get(&(i as u32), 0){
+        //                 Ok(x) => x,
+        //                 Err(_) => 0,
+        //             };
+        //             if val == 0{
+        //                 filename.push(166 as char); // ¦ for empty spaces for debugging
+        //             }
+        //             else{
+
+        //                 filename.push(val as char); // Convert u8 to char and push to String
+        //             }
+        //         }
+        //         let file_dir = filename.split("/");
+                
+        //         let corrected_path: String = filename
+        //             .split('/')
+        //             .rev()
+        //             .collect::<Vec<&str>>()
+        //             .join("/");
+                
+        //         println!("Filename: {}", corrected_path);
+        //     } else {
+        //         // println!("Empty");
+        //     }
+        // }
         // thread::spawn(move || {
         //     let bufData: Array<_, u8> = match Array::try_from(bpf.map_mut("BUF").unwrap()){
         //         Ok(x) => x,

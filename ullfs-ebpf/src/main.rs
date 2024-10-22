@@ -26,7 +26,7 @@ use aya_log_ebpf::info;
 use core::str;
 use core::str::Bytes;
 use core::mem::MaybeUninit;
-
+use aya_ebpf::maps::perf::PerfEventArray;
 const MAX_BUFFER_SIZE: usize = 1024;
 
 #[map]
@@ -37,7 +37,9 @@ static INODEDATA: Array<u64> =
 #[map]
 static PROGDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32,0);
-
+#[map]
+static EVENTS: PerfEventArray<u8> = 
+    PerfEventArray::<u8>::new(0);
 
 
 
@@ -105,7 +107,7 @@ unsafe fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
 }
 
 //fills BUFFER at arrayOffset with characters in d_name.name
-unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset: u32) -> u32 {
+unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset: u32, ctx : &ProbeContext) -> u32 {
     
     let mut end:bool = false;
     let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
@@ -136,7 +138,8 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
                     // push_value_to_array(n * 64 + arrayOffset + i, 47 as u8, &array);
                     break;
                 }
-                push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
+                // push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
+                EVENTS.output_at_index(ctx, n * 64 + arrayOffset + i, &name[i as usize], 0);
             }
             
             //return length
@@ -154,7 +157,7 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
 
 //Just runs dnameToMap n times to get dnames up the directory
 //This function is assumes the first element in buffer is length so if that changes it would need updating
-unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -> bool{
+unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8, ctx: &ProbeContext) -> bool{
     let mut fullLength = 1;
     
     //This loops just mimics in_dir to search up directories
@@ -182,7 +185,7 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8) -
         }
 
         //Updates map then offsets position in map by "len"
-        let len = dnameToMap(current_dentry,&array,fullLength);
+        let len = dnameToMap(current_dentry,&array,fullLength, ctx);
         fullLength += len;
 
         //Add slash (47)
@@ -249,7 +252,10 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        pathToMap(dent,&BUF,50);
+        pathToMap(dent,&BUF,50, ctx);
+        EVENTS.output(ctx, &99, 0);
+
+        
         // let val = bpf_send_signal(2); // This kill your EDITOR for some reason
         // info!(ctx, "Signal Val: {}", val);
         // let pid: i32 = match PROGDATA.get(0){
