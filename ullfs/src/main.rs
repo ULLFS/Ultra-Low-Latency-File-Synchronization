@@ -7,6 +7,7 @@ use aya::{
     Bpf,
     maps::{HashMap,Array},
 };
+use std::sync::Arc;
 use aya_log::BpfLogger;
 use libc::SIGINT;
 use log::{info, warn, debug};
@@ -43,11 +44,11 @@ async fn main() -> Result<(), anyhow::Error> {
     // like to specify the eBPF program at runtime rather than at compile-time, you can
     // reach for `Bpf::load_file` instead.
     #[cfg(debug_assertions)]
-    let mut bpf = Ebpf::load(include_bytes_aligned!(
+    let mut bpf: Ebpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/debug/ullfs"
     ))?;
     #[cfg(not(debug_assertions))]
-    let mut bpf = Ebpf::load(include_bytes_aligned!(
+    let mut bpf: Ebpf = Ebpf::load(include_bytes_aligned!(
         "../../target/bpfel-unknown-none/release/ullfs"
     ))?;
     // if let Err(e) = BpfLogger::init(&mut bpf) {
@@ -109,19 +110,29 @@ async fn main() -> Result<(), anyhow::Error> {
     {
         // l
         // tokio::time::sleep
-        // let mut buf_array = 
         let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
-
+        let buf_array: PerCpuArray<_,u8> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
+            Ok(x) => x,
+            Err(_) => {
+                panic!("PerCpuArray failed to initialize");
+            }
+        };
+        let s_buf = Arc::new(buf_array);
+        
         for cpu_id in online_cpus().map_err(|(_, error)| error)? {
             // open a separate perf buffer for each cpu
             let mut buf = perf_array.open(cpu_id, None)?;
+            // let val_buf = buf_array.get(&1 , 0)?;
             // let bufData: Array<_, u8> = match Array::try_from(bpf.take_map("BUF").unwrap()){
             //     Ok(x) => x,
             //     Err(_) => {
             //         panic!("Error: Bufdata not set up properly");
             //     }
             // };
+            // let val = buf_array.get(&0, 0);
             // process each perf buffer in a separate task
+            let s_buf_clone = Arc::clone(&s_buf);
+
             task::spawn(async move {
                 // let mut bufArray: PerCpuArray<_, u8> = match PerCpuArray::try_from(bpf.map_mut("BUF").unwrap()){
                 //     Ok(x) => x,
@@ -143,6 +154,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             panic!("Buffer read events bad somehow");
                         }
                     };*/
+                    
                     for i in 0..event.read {
                         
                         let buf = &mut buffers[i];
@@ -155,21 +167,62 @@ async fn main() -> Result<(), anyhow::Error> {
                         // Or 0
                         let totalLen: u16 = (len2 as u16 * 255u16) + len as u16;
                         println!("Event received {}: {}, {}", totalLen, len, len2);
-
-                        // I really do like the match statements in rust, although I wish I didn't have to write this stuff so often
-                        // Maybe I could write a macro for this, return if found, panic with msg if not
-                        // let percpuval = match bufArray.get(&0, 0){
-                        //     Ok(x) => x,
-                        //     Err(_) => {
-                        //         panic!("Found no value in index 0 for perCpuArray");
+                        let cpus = match online_cpus().map_err(|(_, error)| error){
+                            Ok(x) => x,
+                            Err(_) => {
+                                panic!("Error getting online cpus");
+                            }
+                        };
+                        // let mut count = 0;
+                        // for cpu_ar in s_buf_clone.iter(){
+                        //     if count > totalLen + 2 {
+                        //         break;
                         //     }
-                        // };
-                        // let val = match percpuval.get(cpu_id as usize) {
-                        //     Some(x) => x,
-                        //     None => &0
-                        // };
-                        // println!("The value at 0: {}", val);
-
+                        //     count += 1;
+                        //     let cpu_ar = match cpu_ar{
+                        //         Ok(x) => x,
+                        //         Err(_) => {
+                        //             panic!("No cpu array");
+                        //         }
+                        //     };
+                        //     let val = match cpu_ar.get(cpu_id as usize){
+                        //         Some(x) => x,
+                        //         None => &0
+                        //     };
+                        //     print!("{}", *val as char);
+                        // }
+                        // println!("");
+                        // Builds string out of characters
+                        let mut filename = String::new();
+                        for i in 0..totalLen{
+                            let val : u8 = match s_buf_clone.get(&(i as u32), 0){
+                                Ok(x) => {
+                                    match x.get(cpu_id as usize){
+                                        Some(y) => *y,
+                                        None => 0,
+                                    }
+                                },
+                                Err(_) => 0,
+                            };
+                        
+                            if val == 0{
+                                filename.push(166 as char); // ¦ for empty spaces for debugging
+                            }
+                            else{
+        
+                                filename.push(val as char); // Convert u8 to char and push to String
+                            }
+                        }
+                        let file_dir = filename.split("/");
+                        
+                        let corrected_path: String = filename
+                            .split('/')
+                            .rev()
+                            .collect::<Vec<&str>>()
+                            .join("/");
+                        
+                        println!("Filename: {}", corrected_path);
+                        
                     }
 
                     
@@ -279,7 +332,10 @@ async fn main() -> Result<(), anyhow::Error> {
         //     }
             
         // });
-            
+        loop {
+
+        }
+        drop(buf_array);
     }
     //{Index, Value, Flags}
     loop {
@@ -288,4 +344,7 @@ async fn main() -> Result<(), anyhow::Error> {
     
 
     Ok(())
+}
+fn coerce_static<'a, T>(v: &'a T) -> &'a T {
+    &v
 }
