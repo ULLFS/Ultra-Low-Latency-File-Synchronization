@@ -13,6 +13,7 @@ use log::{info, warn, debug};
 use tokio::signal::unix::{signal,SignalKind};
 use tokio::signal;
 use std::fs;
+use std::ops::Index;
 use std::os::linux::raw;
 use std::process;
 use std::io::BufReader;
@@ -20,12 +21,8 @@ use serde_json::{self, Value};
 use aya::maps::AsyncPerfEventArray;
 use std::{error::Error, thread};
 use signal_hook::{consts::SIGUSR1, iterator::Signals};
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use tokio::task; // or async_std::task
-async fn signalRecieved() -> Result<(), anyhow::Error>{
-
-    Ok(())
-}
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
@@ -112,9 +109,9 @@ async fn main() -> Result<(), anyhow::Error> {
     {
         // l
         // tokio::time::sleep
-        
+        // let mut buf_array = 
         let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
-        
+
         for cpu_id in online_cpus().map_err(|(_, error)| error)? {
             // open a separate perf buffer for each cpu
             let mut buf = perf_array.open(cpu_id, None)?;
@@ -126,26 +123,52 @@ async fn main() -> Result<(), anyhow::Error> {
             // };
             // process each perf buffer in a separate task
             task::spawn(async move {
-                let mut buffers = (0..10)
-                    .map(|_| BytesMut::with_capacity(1024))
+                // let mut bufArray: PerCpuArray<_, u8> = match PerCpuArray::try_from(bpf.map_mut("BUF").unwrap()){
+                //     Ok(x) => x,
+                //     Err(_) => {
+                //         panic!("PerCPUArray failed to set up");
+                //     }
+                // };
+
+                let mut buffers = (0..4)
+                    .map(|_| BytesMut::with_capacity(4))
                     .collect::<Vec<_>>();
                 
                 loop {
                     
                     // wait for events
-                    let event = match buf.read_events(&mut buffers).await {
-                        Ok(x) => x,
-                        Err(_) => {
+                    let event = buf.read_events(&mut buffers).await.unwrap(); /*{
+                        Some(x) => x,
+                        None => {
                             panic!("Buffer read events bad somehow");
                         }
-                    };
+                    };*/
                     for i in 0..event.read {
+                        
                         let buf = &mut buffers[i];
-                        let val = match buf.get(0){
-                            Some(x) => x,
-                            None => &0,
-                        };
-                        println!("Event received {}", val);
+                        let len = buf.get_u8();
+                        let len2 = buf.get_u8();
+                        // We have the 2 u8's that consist of a u16
+                        // Even though get_u16() existed, it gave me really large numbers
+                        // So I instead combined two u8's
+                        // We know the max size is 4096 so we can use values higher than that as error codes
+                        // Or 0
+                        let totalLen: u16 = (len2 as u16 * 255u16) + len as u16;
+                        println!("Event received {}: {}, {}", totalLen, len, len2);
+
+                        // I really do like the match statements in rust, although I wish I didn't have to write this stuff so often
+                        // Maybe I could write a macro for this, return if found, panic with msg if not
+                        // let percpuval = match bufArray.get(&0, 0){
+                        //     Ok(x) => x,
+                        //     Err(_) => {
+                        //         panic!("Found no value in index 0 for perCpuArray");
+                        //     }
+                        // };
+                        // let val = match percpuval.get(cpu_id as usize) {
+                        //     Some(x) => x,
+                        //     None => &0
+                        // };
+                        // println!("The value at 0: {}", val);
 
                     }
 

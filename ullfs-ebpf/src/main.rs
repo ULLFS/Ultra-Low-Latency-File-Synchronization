@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(warnings)]
-#![feature(asm_experimental_arch)]
+// #![feature(asm_experimental_arch)]
 mod vmlinux;
 
 use vmlinux::{file, inode, path, vfsmount, dentry, qstr};
@@ -30,7 +30,7 @@ use aya_ebpf::maps::perf::PerfEventArray;
 const MAX_BUFFER_SIZE: usize = 1024;
 
 #[map]
-pub static mut BUF: Array<u8> = Array::with_max_entries(4096, 0);
+pub static mut BUF: PerCpuArray<u8> = PerCpuArray::with_max_entries(4096, 0);
 #[map] // 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32, 0);
@@ -38,8 +38,8 @@ static INODEDATA: Array<u64> =
 static PROGDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32,0);
 #[map]
-static EVENTS: PerfEventArray<u8> = 
-    PerfEventArray::<u8>::new(0);
+static EVENTS:  PerfEventArray<u16> = 
+    PerfEventArray::<u16>::new(0);
 
 
 
@@ -107,7 +107,7 @@ unsafe fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
 }
 
 //fills BUFFER at arrayOffset with characters in d_name.name
-unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset: u32, ctx : &ProbeContext) -> u32 {
+unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, arrayOffset: u32, ctx : &ProbeContext) -> u32 {
     
     let mut end:bool = false;
     let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
@@ -138,8 +138,9 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
                     // push_value_to_array(n * 64 + arrayOffset + i, 47 as u8, &array);
                     break;
                 }
-                // push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
-                EVENTS.output_at_index(ctx, n * 64 + arrayOffset + i, &name[i as usize], 0);
+                push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
+
+                // EVENTS.output_at_index(ctx, n * 64 + arrayOffset + i, &name[i as usize], 0);
             }
             
             //return length
@@ -157,7 +158,7 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &Array<u8>, arrayOffset
 
 //Just runs dnameToMap n times to get dnames up the directory
 //This function is assumes the first element in buffer is length so if that changes it would need updating
-unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8, ctx: &ProbeContext) -> bool{
+unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth: u8, ctx: &ProbeContext) -> u32{
     let mut fullLength = 1;
     
     //This loops just mimics in_dir to search up directories
@@ -204,7 +205,7 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &Array<u8>, depth: u8, c
 
     //Pushes final length to array
     push_value_to_array(0, (fullLength-1) as u8, &array);
-    return true;
+    return fullLength - 1;
 }
 
 
@@ -252,8 +253,17 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        pathToMap(dent,&BUF,50, ctx);
-        EVENTS.output(ctx, &99, 0);
+        let len = pathToMap(dent,&BUF,50, ctx);
+        EVENTS.output(ctx, &(len as u16), 0);
+        
+
+        //Testing sending event with index value
+        // EVENTS.output_at_index(ctx, 0, &10, 0);
+        // EVENTS.output_at_index(ctx, 1, &12, 1);
+        // EVENTS.output_at_index(ctx, 2, &14, 2);
+        // EVENTS.output(ctx, &13, 0);
+        // EVENTS.output_at_index(ctx, 0, &234, 0);
+
 
         
         // let val = bpf_send_signal(2); // This kill your EDITOR for some reason
@@ -278,9 +288,9 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
     Ok(0i64)
 }
 
-unsafe fn push_value_to_array<T:Copy>(index: u32, value: T, array : &Array<T>){
-    let output_data_ptr: *mut aya_ebpf::maps::Array<T> = array as *const _ as *mut aya_ebpf::maps::Array<T>;
-
+unsafe fn push_value_to_array<T:Copy>(index: u32, value: T, array : &PerCpuArray<T>){
+    let output_data_ptr: *mut aya_ebpf::maps::PerCpuArray<T> = array as *const _ as *mut aya_ebpf::maps::PerCpuArray<T>;
+    // let output_data_ptr: *mut aya_ebpf::maps::PerCpuArray<T> = array.get_ptr_mut()?;
     bpf_map_update_elem(
         output_data_ptr as *mut c_void, // Map pointer
         &index as *const u32 as *const c_void, // Pointer to the key
