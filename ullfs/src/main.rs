@@ -194,7 +194,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         // println!("");
                         // Builds string out of characters
                         let mut filename = String::new();
-                        for i in 0..totalLen{
+                        for i in 1..totalLen{
                             let val : u8 = match s_buf_clone.get(&(i as u32), 0){
                                 Ok(x) => {
                                     match x.get(cpu_id as usize){
@@ -220,7 +220,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             .rev()
                             .collect::<Vec<&str>>()
                             .join("/");
-                        
+                        println!("Unreversed: {}", filename);
                         println!("Filename: {}", corrected_path);
                         
                     }

@@ -147,7 +147,7 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, array
         }
         if end{
             // This is returning exactly msgLen but if I try to return msgLen directly, we run out of instructions
-            return n * 64 + msgLen % 64;
+            return n * 64 + msgLen % 64 + n;
 
             break;
         }
