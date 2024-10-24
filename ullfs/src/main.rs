@@ -194,6 +194,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         // println!("");
                         // Builds string out of characters
                         let mut filename = String::new();
+                        filename.push('/');
                         for i in 1..totalLen{
                             let val : u8 = match s_buf_clone.get(&(i as u32), 0){
                                 Ok(x) => {

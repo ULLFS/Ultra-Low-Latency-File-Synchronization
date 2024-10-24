@@ -147,7 +147,7 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, array
         }
         if end{
             // This is returning exactly msgLen but if I try to return msgLen directly, we run out of instructions
-            return n * 64 + msgLen % 64 + n;
+            return n * 64 + msgLen % 64;
 
             break;
         }
@@ -180,7 +180,7 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth:
         };
         
         if u64::from(inode_num) == 2 {
-            // Match found, we are in the directory we care about
+            // Hit the root, we are done
             //push_value_to_array(0, (fullLength-1) as u8, &BUF);
             break;  // Return success
         }
@@ -204,8 +204,8 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth:
     }
 
     //Pushes final length to array
-    push_value_to_array(0, (fullLength-1) as u8, &array);
-    return fullLength - 1;
+    // push_value_to_array(0, (fullLength-1) as u8, &array);
+    return fullLength - 1 + (fullLength / 255u32);
 }
 
 
