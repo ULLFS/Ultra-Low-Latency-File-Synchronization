@@ -7,6 +7,8 @@ use aya::{
     Bpf,
     maps::{HashMap,Array},
 };
+use filehasher::hash_check;
+use fileFilter::filter;
 use std::sync::Arc;
 use aya_log::BpfLogger;
 use libc::SIGINT;
@@ -24,10 +26,12 @@ use std::{error::Error, thread};
 use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use bytes::{Buf, BytesMut};
 use tokio::task; // or async_std::task
+pub mod filehasher;
+pub mod fileFilter;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
-
+    fileFilter::init();
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
     let rlim = libc::rlimit {
@@ -166,33 +170,14 @@ async fn main() -> Result<(), anyhow::Error> {
                         // We know the max size is 4096 so we can use values higher than that as error codes
                         // Or 0
                         let totalLen: u16 = (len2 as u16 * 255u16) + len as u16;
-                        println!("Event received {}: {}, {}", totalLen, len, len2);
+                        // println!("Event received {}: {}, {}", totalLen, len, len2);
                         let cpus = match online_cpus().map_err(|(_, error)| error){
                             Ok(x) => x,
                             Err(_) => {
                                 panic!("Error getting online cpus");
                             }
                         };
-                        // let mut count = 0;
-                        // for cpu_ar in s_buf_clone.iter(){
-                        //     if count > totalLen + 2 {
-                        //         break;
-                        //     }
-                        //     count += 1;
-                        //     let cpu_ar = match cpu_ar{
-                        //         Ok(x) => x,
-                        //         Err(_) => {
-                        //             panic!("No cpu array");
-                        //         }
-                        //     };
-                        //     let val = match cpu_ar.get(cpu_id as usize){
-                        //         Some(x) => x,
-                        //         None => &0
-                        //     };
-                        //     print!("{}", *val as char);
-                        // }
-                        // println!("");
-                        // Builds string out of characters
+
                         let mut filename = String::new();
                         
                         for i in 1..totalLen{
@@ -214,17 +199,20 @@ async fn main() -> Result<(), anyhow::Error> {
                                 filename.push(val as char); // Convert u8 to char and push to String
                             }
                         }
-                        filename.push('/');
-                        let file_dir = filename.split("/");
+                        filename.push('/'); 
                         
                         let corrected_path: String = filename
                             .split('/')
                             .rev()
                             .collect::<Vec<&str>>()
                             .join("/");
-                        println!("Unreversed: {}", filename);
-                        println!("Filename: {}", corrected_path);
-                        
+                        // println!("Unreversed: {}", filename);
+                        // Now we actually get to deal with deltas
+                        if(fileFilter::filter(&corrected_path)){
+                            println!("Filename: {}", corrected_path);
+                            hash_check(&corrected_path);
+
+                        }   
                     }
 
                     
@@ -233,118 +221,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 // Ok::<_, PerfBufferError>(())
             });
         }
-        // loop {
-        //     let len = match bufData.get(&0, 0) {
-        //         Ok(x) => x,
-        //         Err(_) => 0,
-        //     };
-        //     if len != 0{
-        //         for i in 0..len{
-        //             let val: u8 = match bufData.get(&(i as u32), 0){
-        //                 Ok(x) => x,
-        //                 Err(_) => 0,
-        //             };
-        //             if i == 0 {
-        //                 println!("Length {}: {}", i, val);
-        //             }
-        //             //else{
-        //             //    println!("Char {}: {}", i, val as char);
-        //             //}
-        //         }
-        //         // Builds string out of characters
-        //         let mut filename = String::new();
-        //         for i in 1..len {
-        //             let val: u8 = match bufData.get(&(i as u32), 0){
-        //                 Ok(x) => x,
-        //                 Err(_) => 0,
-        //             };
-        //             if val == 0{
-        //                 filename.push(166 as char); // ¦ for empty spaces for debugging
-        //             }
-        //             else{
-
-        //                 filename.push(val as char); // Convert u8 to char and push to String
-        //             }
-        //         }
-        //         let file_dir = filename.split("/");
-                
-        //         let corrected_path: String = filename
-        //             .split('/')
-        //             .rev()
-        //             .collect::<Vec<&str>>()
-        //             .join("/");
-                
-        //         println!("Filename: {}", corrected_path);
-        //     } else {
-        //         // println!("Empty");
-        //     }
-        // }
-        // thread::spawn(move || {
-        //     let bufData: Array<_, u8> = match Array::try_from(bpf.map_mut("BUF").unwrap()){
-        //         Ok(x) => x,
-        //         Err(_) => {
-        //             panic!("Error: Bufdata not set up properly");
-        //         }
-        //     };
-        //     for _sig in signals.forever() {
-        //         let len = match bufData.get(&0, 0) {
-        //             Ok(x) => x,
-        //             Err(_) => 0,
-        //         };
-        //         if len != 0{
-        //             for i in 0..len{
-        //                 let val: u8 = match bufData.get(&(i as u32), 0){
-        //                     Ok(x) => x,
-        //                     Err(_) => 0,
-        //                 };
-        //                 if i == 0 {
-        //                     println!("Length {}: {}", i, val);
-        //                 }
-        //                 //else{
-        //                 //    println!("Char {}: {}", i, val as char);
-        //                 //}
-        //             }
-        //             // Builds string out of characters
-        //             let mut filename = String::new();
-        //             for i in 1..len {
-        //                 let val: u8 = match bufData.get(&(i as u32), 0){
-        //                     Ok(x) => x,
-        //                     Err(_) => 0,
-        //                 };
-        //                 if val == 0{
-        //                     filename.push(166 as char); // ¦ for empty spaces for debugging
-        //                 }
-        //                 else{
-
-        //                     filename.push(val as char); // Convert u8 to char and push to String
-        //                 }
-        //             }
-        //             let file_dir = filename.split("/");
-                    
-        //             let corrected_path: String = filename
-        //                 .split('/')
-        //                 .rev()
-        //                 .collect::<Vec<&str>>()
-        //                 .join("/");
-                    
-        //             println!("Filename: {}", corrected_path);
-        //         } else {
-        //             println!("Empty");
-        //         }
-        //     }
-            
-        // });
-        loop {
-
-        }
-        drop(buf_array);
     }
     //{Index, Value, Flags}
-    loop {
-
-    }
-    
-
+    let t = tokio::signal::ctrl_c().await;
+    println!("Exiting");
     Ok(())
 }
 fn coerce_static<'a, T>(v: &'a T) -> &'a T {

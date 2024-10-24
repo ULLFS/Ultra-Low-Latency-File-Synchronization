@@ -227,7 +227,6 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
             push_value_to_array(0, 0u8, &BUF);
             return Ok(0i64);
         }
-        // info!(ctx, "Never gets here");
 
         let path = bpf_probe_read_kernel(&(*file).f_path)?;
         let dent = path.dentry;
@@ -255,34 +254,6 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         //Run's dnameToMap to depth 3 
         let len = pathToMap(dent,&BUF,50, ctx);
         EVENTS.output(ctx, &(len as u16), 0);
-        
-
-        //Testing sending event with index value
-        // EVENTS.output_at_index(ctx, 0, &10, 0);
-        // EVENTS.output_at_index(ctx, 1, &12, 1);
-        // EVENTS.output_at_index(ctx, 2, &14, 2);
-        // EVENTS.output(ctx, &13, 0);
-        // EVENTS.output_at_index(ctx, 0, &234, 0);
-
-
-        
-        // let val = bpf_send_signal(2); // This kill your EDITOR for some reason
-        // info!(ctx, "Signal Val: {}", val);
-        // let pid: i32 = match PROGDATA.get(0){
-        //     Some (x) => *x as i32,
-        //     None => {
-        //         panic!("No progdata at 0 found");
-        //     }
-        // }; // Replace with the target PID
-        // let signal: i32 = 10; // SIGUSR1
-        // asm!(
-        //     "syscall",
-        //     inout("rax") 62 => _,  // syscall number for kill
-        //     in("rdi") pid,    // first argument: pid
-        //     in("rsi") signal, // second argument: signal
-        //     options(nostack),
-        // );
-        
         
     };
     Ok(0i64)
