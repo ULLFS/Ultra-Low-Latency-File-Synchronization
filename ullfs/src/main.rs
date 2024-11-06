@@ -7,8 +7,8 @@ use aya::{
     Bpf,
     maps::{HashMap,Array},
 };
+use env_logger::filter;
 use filehasher::hash_check;
-use fileFilter::filter;
 use std::sync::Arc;
 use aya_log::BpfLogger;
 use libc::SIGINT;
@@ -25,13 +25,14 @@ use aya::maps::AsyncPerfEventArray;
 use std::{error::Error, thread};
 use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use bytes::{Buf, BytesMut};
+
 use tokio::task; // or async_std::task
 pub mod filehasher;
 pub mod fileFilter;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
-    fileFilter::init();
+    
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
     let rlim = libc::rlimit {
@@ -94,6 +95,9 @@ async fn main() -> Result<(), anyhow::Error> {
             panic!("Error: Directory {} not found, something must be wrong with your config file\n{}", &watch_dir, e);
         }
     };
+    
+    
+    
     // Get the inode from the metadata
     let block_addr: u64 = std::os::linux::fs::MetadataExt::st_ino(&w_dir);
     println!("Block Address: {}", block_addr);
@@ -138,6 +142,8 @@ async fn main() -> Result<(), anyhow::Error> {
             let s_buf_clone = Arc::clone(&s_buf);
 
             task::spawn(async move {
+                let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
+                
                 // let mut bufArray: PerCpuArray<_, u8> = match PerCpuArray::try_from(bpf.map_mut("BUF").unwrap()){
                 //     Ok(x) => x,
                 //     Err(_) => {
@@ -179,7 +185,6 @@ async fn main() -> Result<(), anyhow::Error> {
                         };
 
                         let mut filename = String::new();
-                        
                         for i in 1..totalLen{
                             let val : u8 = match s_buf_clone.get(&(i as u32), 0){
                                 Ok(x) => {
@@ -208,11 +213,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             .join("/");
                         // println!("Unreversed: {}", filename);
                         // Now we actually get to deal with deltas
-                        if(fileFilter::filter(&corrected_path)){
-                            println!("Filename: {}", corrected_path);
-                            hash_check(&corrected_path);
-
-                        }   
+                        let shouldFilter = filter.should_filter(corrected_path);
                     }
 
                     

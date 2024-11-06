@@ -9,5 +9,6 @@ pub async fn hash_check(filepath: &str) -> Result<Bytes,Error>{
 
     let f = fs::File::open(filepath)?;
     let r = BufReader::new(f);    
+    
     return Ok(Bytes::new());
 }
