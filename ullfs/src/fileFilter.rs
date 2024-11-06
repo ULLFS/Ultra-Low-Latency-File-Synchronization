@@ -1,9 +1,6 @@
-use std::fs::File;
-use std::ptr::null;
-use ignore::gitignore::{self, Gitignore, GitignoreBuilder};
-use std::{fs, io::BufReader, vec};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use std::{fs, io::BufReader};
 use std::sync::OnceLock;
-use libc::NFT_NAT_DNAT;
 use serde_json::Value;
 
 static INSTANCE: OnceLock<Filter> = OnceLock::new();

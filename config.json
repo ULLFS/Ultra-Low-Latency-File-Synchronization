@@ -1,7 +1,8 @@
 {
     "watch_dir":"/home/zmanjaroschool/TestDir",
     "ignore_ext":[".kate-swp"],
-    "ignore_subdirs":[],
-    "ignore_files":[],
-    "ignore_hidden_files": true
+    "ignore": [
+        
+    ]
+    
 }
