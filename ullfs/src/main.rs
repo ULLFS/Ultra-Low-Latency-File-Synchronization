@@ -166,7 +166,6 @@ async fn main() -> Result<(), anyhow::Error> {
                     };*/
                     
                     for i in 0..event.read {
-                        
                         let buf = &mut buffers[i];
                         let len = buf.get_u8();
                         let len2 = buf.get_u8();
@@ -206,19 +205,24 @@ async fn main() -> Result<(), anyhow::Error> {
                         }
                         filename.push('/'); 
                         
+                        // Correct reversed path
                         let corrected_path: String = filename
                             .split('/')
                             .rev()
                             .collect::<Vec<&str>>()
                             .join("/");
-                        // println!("Unreversed: {}", filename);
+                        println!("Unreversed: {}", corrected_path);
+
+
                         // Now we actually get to deal with deltas
                         let shouldFilter = filter.should_filter(corrected_path);
+
+                        // Extract deltas
+                        if(shouldFilter){
+
+                        }
                     }
-
-                    
                 }
-
                 // Ok::<_, PerfBufferError>(())
             });
         }
