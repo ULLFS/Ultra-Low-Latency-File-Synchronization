@@ -1,7 +1,3 @@
-// ssh trevor@ullfs.homiecourt.xyz
-// Raspberry Pi's internal IPv4 address is 192.168.1.212 -> address will use for port forwarding
-// 2600:6c42:7600:32f::11ed
-
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::net::UdpSocket;
