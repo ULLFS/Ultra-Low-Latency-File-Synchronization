@@ -11,6 +11,8 @@ static INSTANCE: OnceLock<Filter> = OnceLock::new();
 pub struct Filter{
     ignore: Gitignore,
     baseDir: String,
+    dns_web_address : String,
+    client_port : String,
     
 }
 impl Filter{
@@ -29,6 +31,18 @@ impl Filter{
             }
         }; 
         let watch_dir : String = match &conf["watch_dir"].as_str() {
+            None => {
+                panic!("Error: watch_dir was not a string in config.json");
+            }
+            Some(x) => x.to_string(),
+        };
+        let f_dns_web_address : String = match &conf["dns_web_address"].as_str() {
+            None => {
+                panic!("Error: dns_web_address was not a string in config.json");
+            }
+            Some(x) => x.to_string(),
+        };
+        let f_client_port : String = match &conf["client_port"].as_str() {
             None => {
                 panic!("Error: watch_dir was not a string in config.json");
             }
@@ -67,6 +81,8 @@ impl Filter{
         Filter {
             ignore: ignorer,
             baseDir: watch_dir,
+            dns_web_address: f_dns_web_address,
+            client_port : f_client_port,
         }
     }
     pub fn get_instance() -> &'static Filter{

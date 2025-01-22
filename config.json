@@ -1,5 +1,7 @@
 {
     "watch_dir":"/home/zmanjaroschool/TestDir",
+    "dns_web_address":"server.homiecourt.xyz",
+    "client_port":"34254",
     "ignore_ext":[".kate-swp"],
     "ignore": [
         
