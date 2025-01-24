@@ -11,8 +11,7 @@ static INSTANCE: OnceLock<Filter> = OnceLock::new();
 pub struct Filter{
     ignore: Gitignore,
     baseDir: String,
-    dns_web_address : String,
-    client_port : String,
+
     
 }
 impl Filter{
@@ -36,18 +35,8 @@ impl Filter{
             }
             Some(x) => x.to_string(),
         };
-        let f_dns_web_address : String = match &conf["dns_web_address"].as_str() {
-            None => {
-                panic!("Error: dns_web_address was not a string in config.json");
-            }
-            Some(x) => x.to_string(),
-        };
-        let f_client_port : String = match &conf["client_port"].as_str() {
-            None => {
-                panic!("Error: watch_dir was not a string in config.json");
-            }
-            Some(x) => x.to_string(),
-        };
+        
+        
         let ignore_rules: Vec<Value> = match &conf["ignore"].as_array(){
             None => {
                 panic!("Error: ignore was not an array of values in config.json");
@@ -81,27 +70,18 @@ impl Filter{
         Filter {
             ignore: ignorer,
             baseDir: watch_dir,
-            dns_web_address: f_dns_web_address,
-            client_port : f_client_port,
         }
     }
     pub fn get_instance() -> &'static Filter{
         INSTANCE.get_or_init(|| Filter::new())
     }
-    pub fn should_filter(&self, path: String) -> bool{
+    pub fn should_filter(&self, path: &str) -> bool{
         self.ignore.matched(path, false).is_ignore();
         false
     }
 
     // Getter for dns_web_address
-    pub fn get_dns_web_address(&self) -> &str {
-        &self.dns_web_address
-    }
-
-    // Getter for client_port
-    pub fn get_client_port(&self) -> &str {
-        &self.client_port
-    }
+    
     
 }
 

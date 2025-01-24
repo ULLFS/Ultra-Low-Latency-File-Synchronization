@@ -7,6 +7,7 @@ use aya::{
     Bpf,
     maps::{HashMap,Array},
 };
+use client::send_full_contents_of_file;
 use env_logger::filter;
 use filehasher::hash_check;
 use std::sync::Arc;
@@ -27,6 +28,7 @@ use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use bytes::{Buf, BytesMut};
 
 use tokio::task; // or async_std::task
+mod client;
 pub mod filehasher;
 pub mod fileFilter;
 #[tokio::main]
@@ -215,11 +217,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
 
                         // Now we actually get to deal with deltas
-                        let shouldFilter = filter.should_filter(corrected_path);
+                        let final_path = corrected_path.as_str();
+                        let shouldFilter = filter.should_filter(final_path);
 
                         // Extract deltas
-                        if(shouldFilter){
-
+                        if(!shouldFilter){
+                            send_full_contents_of_file(final_path);
                         }
                     }
                 }
