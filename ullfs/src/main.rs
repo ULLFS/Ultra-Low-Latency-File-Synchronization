@@ -206,7 +206,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                         }
                         filename.push('/'); 
-                        
+                        println!("{}",filename);
                         // Correct reversed path
                         let corrected_path: String = filename
                             .split('/')

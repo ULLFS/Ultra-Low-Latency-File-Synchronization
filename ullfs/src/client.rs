@@ -77,7 +77,7 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
     // println!("Directory to watch: {}", dir_to_watch);
     println!("DNS Web Address: {}", dns_web_address);
     println!("Client Port: {}", client_port);
-
+    println!("updating file: {}", filename);
     // Form the server address using the DNS web address and client port
     let server_address = format!("{}:{}", dns_web_address, client_port);
     // Connect the socket to the server
