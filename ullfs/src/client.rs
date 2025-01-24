@@ -17,14 +17,14 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
     let filter = Filter::get_instance();
     
     // Get configuration details from the Filter instance
-    let dir_to_watch = filter.get_base_dir();
+    // let dir_to_watch = filter.get_base_dir();
     let dns_web_address = filter.get_dns_web_address();
     let client_port = filter.get_client_port();
 
     // Print configuration details for debugging purposes
-    println!("Directory to watch: {}", dir_to_watch);
+    /* println!("Directory to watch: {}", dir_to_watch);
     println!("DNS Web Address: {}", dns_web_address);
-    println!("Client Port: {}", client_port);
+    println!("Client Port: {}", client_port); */
 
     // Form the server address using the DNS web address and client port
     let server_address = format!("{}:{}", dns_web_address, client_port);
