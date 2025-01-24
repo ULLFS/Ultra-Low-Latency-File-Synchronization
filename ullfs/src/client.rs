@@ -1,83 +1,31 @@
-use std::fs::{self, File};
-use std::io::{self, BufReader, Read};
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::Path;
 use std::net::UdpSocket;
-use std::sync::OnceLock;
 use std::time::Duration;
-
-use serde_json::Value;
-// use crate::file_filter::Filter; // Import the Filter struct for connection details
+use crate::fileFilter::Filter; // Import the Filter struct for connection details
 
 // Constants for packet size and acknowledgment timeout
 const PACKET_SIZE: usize = 1024; // Size of each packet to be sent
 const ACK_TIMEOUT: Duration = Duration::from_secs(1); // Timeout for acknowledgment reception
-static INSTANCE: OnceLock<netData> = OnceLock::new();
-pub struct netData {
-    dns_web_address : String,
-    client_port : String,
-}
-impl netData {
-    fn new() -> Self {
-        
-        let conf_file : fs::File = match fs::File::open("./config.json"){
-            Ok(x) => x,
-            Err(e) => {
-                panic!("Error: config.json missing or destroyed.\n{}", e)
-            }
-        };
-        let reader = BufReader::new(conf_file);
-        let conf : Value = match serde_json::from_reader(reader){
-            Ok(x) => x,
-            Err(e) => {
-                panic!("Error: config.json structure damaged.\n{}", e);
-            }
-        };
-        let f_dns_web_address : String = match &conf["dns_web_address"].as_str() {
-            None => {
-                panic!("Error: dns_web_address was not a string in config.json");
-            }
-            Some(x) => x.to_string(),
-        };
-        let f_client_port : String = match &conf["client_port"].as_str() {
-            None => {
-                panic!("Error: watch_dir was not a string in config.json");
-            }
-            Some(x) => x.to_string(),
-        };
-        netData{
-            dns_web_address: f_dns_web_address,
-            client_port: f_client_port
-        }
-    }
-    pub fn get_instance() -> &'static netData{
-        INSTANCE.get_or_init(|| netData::new())
-    }
-    pub fn get_dns_web_address(&self) -> &str {
-        &self.dns_web_address
-    }
 
-    // Getter for client_port
-    pub fn get_client_port(&self) -> &str {
-        &self.client_port
-    }
-}
-pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
+pub fn send_full_contents_of_file(filename: &Path) -> io::Result<()> {
     // Create a UDP socket bound to an ephemeral port
     let socket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
 
     // Retrieve the Filter instance to access configuration details
+    let filter = Filter::get_instance();
     
     // Get configuration details from the Filter instance
-    // let dir_to_watch = ();
-    let netdata = netData::get_instance();
-    let dns_web_address = netdata.get_dns_web_address();
-    let client_port = netdata.get_client_port();
+    let dir_to_watch = filter.get_base_dir();
+    let dns_web_address = filter.get_dns_web_address();
+    let client_port = filter.get_client_port();
 
     // Print configuration details for debugging purposes
-    // println!("Directory to watch: {}", dir_to_watch);
+    println!("Directory to watch: {}", dir_to_watch);
     println!("DNS Web Address: {}", dns_web_address);
     println!("Client Port: {}", client_port);
-    println!("updating file: {}", filename);
+
     // Form the server address using the DNS web address and client port
     let server_address = format!("{}:{}", dns_web_address, client_port);
     // Connect the socket to the server
@@ -86,8 +34,7 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
         .expect("Failed to connect to the server.");
 
     // Open the file to be sent
-    // let new_name = filename.as_str();
-    let mut file = File::open(filename).expect(format!("Failed to open {}", filename).as_str());
+    let mut file = File::open(filename).expect("Failed to open test.txt");
     // Allocate a buffer for file chunks, reserving 4 bytes for the sequence number
     let mut buffer: [u8; 1020] = [0; PACKET_SIZE - 4];
     // Initialize sequence number for packet identification

@@ -74,17 +74,29 @@ impl Filter{
         }
         
     }
+    
     pub fn get_base_dir(&self) -> &str {
         &self.baseDir.as_str()
     }
+
     pub fn get_instance() -> &'static Filter{
         INSTANCE.get_or_init(|| Filter::new())
     }
+
     pub fn should_filter(&self, path: &str) -> bool{
         self.ignore.matched(path, false).is_ignore();
         false
     }
-    // Getter for dns_web_address
+    
+    // Getter for client_port
+    pub fn get_client_port(&self) -> &str {
+        &self.client_port
+    }
+
+    // Getter for baseDir
+    pub fn get_base_dir(&self) -> &str {
+        &self.base_dir
+    }
     
     
 }
