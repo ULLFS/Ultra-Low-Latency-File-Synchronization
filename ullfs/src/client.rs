@@ -11,32 +11,36 @@ const ACK_TIMEOUT: Duration = Duration::from_secs(1); // Timeout for acknowledgm
 
 pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
     // Create a UDP socket bound to an ephemeral port
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
+    let socket: UdpSocket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
 
     // Retrieve the Filter instance to access configuration details
-    let filter = Filter::get_instance();
+    let filter: &Filter = Filter::get_instance();
     
     // Get configuration details from the Filter instance
-    // let dir_to_watch = filter.get_base_dir();
-    let dns_web_address = filter.get_dns_web_address();
-    let client_port = filter.get_client_port();
-
-    // Print configuration details for debugging purposes
-    /* println!("Directory to watch: {}", dir_to_watch);
-    println!("DNS Web Address: {}", dns_web_address);
-    println!("Client Port: {}", client_port); */
+    let dns_web_address: &str = filter.get_dns_web_address();
+    let client_port: &str = filter.get_client_port();
 
     // Form the server address using the DNS web address and client port
-    let server_address = format!("{}:{}", dns_web_address, client_port);
+    let server_address: String = format!("{}:{}", dns_web_address, client_port);
+
     // Connect the socket to the server
     socket
         .connect(&server_address)
         .expect("Failed to connect to the server.");
 
+    // Determine the relative file path to send to the server
+    let relative_path = Path::new(filename).to_str().expect("Invalid file path");
+
+    // Send the `__SOF__` packet with the relative file path
+    let sof_packet = format!("__SOF__{}", relative_path);
+    socket.send(sof_packet.as_bytes())?;
+
     // Open the file to be sent
-    let mut file = File::open(filename).expect("Failed to open test.txt");
+    let mut file: File = File::open(filename).expect("Failed to open file");
+
     // Allocate a buffer for file chunks, reserving 4 bytes for the sequence number
     let mut buffer: [u8; 1020] = [0; PACKET_SIZE - 4];
+
     // Initialize sequence number for packet identification
     let mut sequence_number: u32 = 0u32;
 
@@ -44,7 +48,7 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
 
     loop {
         // Read a chunk of data from the file into the buffer
-        let bytes_read = file.read(&mut buffer)?;
+        let bytes_read: usize = file.read(&mut buffer)?;
         if bytes_read == 0 {
             // If no more data, send an EOF packet to signal the end of file transmission
             let eof_packet: &[u8; 7] = b"__EOF__";
