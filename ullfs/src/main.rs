@@ -88,6 +88,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         Some(x) => x,
     };
+    let watch_dir_string : String = String::from(watch_dir);
     // Debugging data
     // println!("Conf file output: {}", &watch_dir);
     // Get the metadata from the watch_dir
@@ -128,7 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
             }
         };
         let s_buf = Arc::new(buf_array);
-        
+        // let watch_dir_clone = Arc::new(watch_dir);
         for cpu_id in online_cpus().map_err(|(_, error)| error)? {
             // open a separate perf buffer for each cpu
             let mut buf = perf_array.open(cpu_id, None)?;
@@ -142,7 +143,7 @@ async fn main() -> Result<(), anyhow::Error> {
             // let val = buf_array.get(&0, 0);
             // process each perf buffer in a separate task
             let s_buf_clone = Arc::clone(&s_buf);
-
+            
             task::spawn(async move {
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
                 
@@ -152,7 +153,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 //         panic!("PerCPUArray failed to set up");
                 //     }
                 // };
-
+                
                 let mut buffers = (0..4)
                     .map(|_| BytesMut::with_capacity(4))
                     .collect::<Vec<_>>();
@@ -215,14 +216,15 @@ async fn main() -> Result<(), anyhow::Error> {
                             .join("/");
                         println!("Unreversed: {}", corrected_path);
 
-
+                    
                         // Now we actually get to deal with deltas
-                        let final_path = corrected_path.as_str();
-                        let shouldFilter = filter.should_filter(final_path);
+                        // Create the final path from the path we got and the watch directory
+                        let final_path = String::from(filter.get_base_dir()) + corrected_path.as_str();
+                        let shouldFilter = filter.should_filter(final_path.as_str());
 
                         // Extract deltas
                         if(!shouldFilter){
-                            send_full_contents_of_file(final_path);
+                            send_full_contents_of_file(final_path.as_str());
                         }
                     }
                 }

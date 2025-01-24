@@ -10,3 +10,4 @@ target/
 .vim
 .vscode
 ullfs-ebpf/src/vmlinux.rs
+config.json

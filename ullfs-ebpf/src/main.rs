@@ -158,7 +158,7 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, array
 
 //Just runs dnameToMap n times to get dnames up the directory
 //This function is assumes the first element in buffer is length so if that changes it would need updating
-unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth: u8, ctx: &ProbeContext, dir_inode: &u64) -> u32{
+unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth: u8, ctx: &ProbeContext, dir_inode: u64) -> u32{
     let mut fullLength = 1;
     
     //This loops just mimics in_dir to search up directories
@@ -184,7 +184,7 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth:
         //     //push_value_to_array(0, (fullLength-1) as u8, &BUF);
         //     break;  // Return success
         // }
-        if u64::from(inode_num) == *dir_inode {
+        if u64::from(inode_num) == dir_inode {
             break;
         }
 
@@ -255,7 +255,7 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
 
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        let len = pathToMap(dent,&BUF,50, ctx, dir_inode);
+        let len = pathToMap(dent,&BUF,50, ctx, *dir_inode);
         EVENTS.output(ctx, &(len as u16), 0);
         
     };

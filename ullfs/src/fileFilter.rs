@@ -12,6 +12,7 @@ pub struct Filter{
     ignore: Gitignore,
     baseDir: String,
 
+
     
 }
 impl Filter{
@@ -71,6 +72,10 @@ impl Filter{
             ignore: ignorer,
             baseDir: watch_dir,
         }
+        
+    }
+    pub fn get_base_dir(&self) -> &str {
+        &self.baseDir.as_str()
     }
     pub fn get_instance() -> &'static Filter{
         INSTANCE.get_or_init(|| Filter::new())
@@ -79,7 +84,6 @@ impl Filter{
         self.ignore.matched(path, false).is_ignore();
         false
     }
-
     // Getter for dns_web_address
     
     
