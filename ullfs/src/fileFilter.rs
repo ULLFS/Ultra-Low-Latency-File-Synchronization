@@ -11,10 +11,10 @@ static INSTANCE: OnceLock<Filter> = OnceLock::new();
 pub struct Filter{
     ignore: Gitignore,
     baseDir: String,
-
-
-    
+    dns_web_address: String,
+    client_port: String,
 }
+
 impl Filter{
     fn new() -> Self {
         let conf_file : fs::File = match fs::File::open("./config.json"){
@@ -36,7 +36,16 @@ impl Filter{
             }
             Some(x) => x.to_string(),
         };
-        
+
+        let f_dns_web_address: String = match conf["dns_web_address"].as_str() {
+            Some(x) => x.to_string(),
+            None => panic!("Error: dns_web_address was not a string in config.json"),
+        };
+
+        let f_client_port: String = match conf["client_port"].as_str() {
+            Some(x) => x.to_string(),
+            None => panic!("Error: client_port was not a string in config.json"),
+        };
         
         let ignore_rules: Vec<Value> = match &conf["ignore"].as_array(){
             None => {
@@ -44,6 +53,7 @@ impl Filter{
             }
             Some(x) => x.to_vec(),
         };
+
         let mut ignoreBuilder: GitignoreBuilder = GitignoreBuilder::new(watch_dir.clone());
         for val in ignore_rules{
             let valStr: String = match val.as_str(){
@@ -71,6 +81,8 @@ impl Filter{
         Filter {
             ignore: ignorer,
             baseDir: watch_dir,
+            dns_web_address: f_dns_web_address,
+            client_port: f_client_port,
         }
         
     }

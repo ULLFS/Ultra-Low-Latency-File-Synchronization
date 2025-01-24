@@ -9,7 +9,7 @@ use crate::fileFilter::Filter; // Import the Filter struct for connection detail
 const PACKET_SIZE: usize = 1024; // Size of each packet to be sent
 const ACK_TIMEOUT: Duration = Duration::from_secs(1); // Timeout for acknowledgment reception
 
-pub fn send_full_contents_of_file(filename: &Path) -> io::Result<()> {
+pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
     // Create a UDP socket bound to an ephemeral port
     let socket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
 
