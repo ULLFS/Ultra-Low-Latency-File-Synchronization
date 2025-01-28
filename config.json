@@ -1,0 +1,8 @@
+{
+    "watch_dir":"/home/trevor/Documents/TestDir",
+    "server_ip":"0.0.0.0",
+    "server_port":"34254",
+    "ignore_ext":[".kate-swp"],
+    "ignore": []
+    
+}
