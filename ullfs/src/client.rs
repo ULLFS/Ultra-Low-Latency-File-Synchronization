@@ -1,7 +1,7 @@
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
-use std::net::UdpSocket;
+use std::net::{TcpStream, UdpSocket};
 use std::time::Duration;
 use crate::fileFilter::Filter; // Import the Filter struct for connection details
 
@@ -9,7 +9,7 @@ use crate::fileFilter::Filter; // Import the Filter struct for connection detail
 const PACKET_SIZE: usize = 1024; // Size of each packet to be sent
 const ACK_TIMEOUT: Duration = Duration::from_secs(1); // Timeout for acknowledgment reception
 
-pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
+pub fn send_full_contents_of_file_udp(filename: &str) -> io::Result<()> {
     // Create a UDP socket bound to an ephemeral port
     let socket: UdpSocket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
 
@@ -44,7 +44,7 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
     // Initialize sequence number for packet identification
     let mut sequence_number: u32 = 0u32;
 
-    println!("Sending File...");
+    println!("Sending File over UDP...");
 
     loop {
         // Read a chunk of data from the file into the buffer
@@ -83,6 +83,46 @@ pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
         sequence_number = sequence_number.wrapping_add(1);
     }
 
-    println!("File sent successfully.");
+    println!("File sent successfully over UDP.");
+    Ok(())
+}
+
+pub fn send_full_contents_of_file_tcp(filename: &str) -> io::Result<()> {
+    // Retrieve the Filter instance to access configuration details
+    let filter: &Filter = Filter::get_instance();
+    let dns_web_address: &str = filter.get_dns_web_address();
+    let client_port: &str = filter.get_client_port();
+
+    // Form the server address using the DNS web address and client port
+    let server_address: String = format!("{}:{}", dns_web_address, client_port);
+
+    // Establish a TCP connection to the server
+    let mut stream = TcpStream::connect(&server_address).expect("Failed to connect to the server.");
+
+    // Determine the relative file path to send to the server
+    let relative_path = Path::new(filename).to_str().expect("Invalid file path");
+
+    // Send the `__SOF__` packet with the relative file path
+    let sof_packet = format!("__SOF__{}", relative_path);
+    stream.write_all(sof_packet.as_bytes())?;
+
+    // Open the file to be sent
+    let mut file: File = File::open(filename).expect("Failed to open file");
+    let mut buffer = [0; PACKET_SIZE];
+    println!("Sending File over TCP...");
+
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            // Send an EOF marker to signal the end of file transmission
+            stream.write_all(b"__EOF__")?;
+            break;
+        }
+        
+        // Send the read bytes over the TCP stream
+        stream.write_all(&buffer[..bytes_read])?;
+    }
+
+    println!("File sent successfully over TCP.");
     Ok(())
 }

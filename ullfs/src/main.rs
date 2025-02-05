@@ -7,7 +7,7 @@ use aya::{
     Bpf,
     maps::{HashMap,Array},
 };
-use client::send_full_contents_of_file;
+use client::send_full_contents_of_file_tcp;
 use env_logger::filter;
 use filehasher::hash_check;
 use std::sync::Arc;
@@ -257,7 +257,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
                         // Extract deltas
                         if(!shouldFilter){
-                            // send_full_contents_of_file(final_path.as_str());
+                            // send_full_contents_of_file_tcp(final_path.as_str());
                         }
                     }
                 }
