@@ -4,7 +4,7 @@ build:
 run:
 	RUST_LOG=info cargo xtask run
 bindings:
-	${HOME}/.cargo/bin/aya-tool generate file > ./ullfs-ebpf/src/vmlinux.rs
+	${HOME}/.cargo/bin/aya-tool generate file renamedata > ./ullfs-ebpf/src/vmlinux.rs
 clean:
 	cargo clean
 install-aya-tool:

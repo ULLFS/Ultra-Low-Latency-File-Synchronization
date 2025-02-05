@@ -1,5 +1,5 @@
 {
-    "watch_dir":"/home/trevor/Documents/TestDir",
+    "watch_dir":"/home/wtech/TestFolder",
     "dns_web_address":"server.homiecourt.xyz",
     "client_port":"34254",
     "ignore_ext":[".kate-swp"],

@@ -4,7 +4,7 @@
 // #![feature(asm_experimental_arch)]
 mod vmlinux;
 
-use vmlinux::{file, inode, path, vfsmount, dentry, qstr};
+use vmlinux::{file, inode, path, vfsmount, renamedata, dentry, qstr};
 
 use aya_ebpf::{
     helpers::bpf_probe_read_kernel,
@@ -13,7 +13,7 @@ use aya_ebpf::{
     helpers::bpf_probe_read_kernel_str_bytes,
     helpers::bpf_probe_read_kernel_str,
     helpers::gen::bpf_send_signal,
-    macros::{kprobe,map},
+    macros::{kprobe,kretprobe,map},
     maps::{HashMap, Array, PerCpuArray},
     programs::ProbeContext,
     
@@ -29,6 +29,13 @@ use core::mem::MaybeUninit;
 use aya_ebpf::maps::perf::PerfEventArray;
 const MAX_BUFFER_SIZE: usize = 1024;
 
+
+#[repr(C)]  // This ensures the struct has a stable memory layout, useful for FFI or sending over buffers.
+struct EventData {
+    len: u16,        // Length (2 bytes)
+    event_type: u8,  // The type of the event (1 byte)
+}
+
 #[map]
 pub static mut BUF: PerCpuArray<u8> = PerCpuArray::with_max_entries(4096, 0);
 #[map] // 
@@ -38,32 +45,113 @@ static INODEDATA: Array<u64> =
 static PROGDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32,0);
 #[map]
-static EVENTS:  PerfEventArray<u16> = 
-    PerfEventArray::<u16>::new(0);
+static EVENTS:  PerfEventArray<EventData> = 
+    PerfEventArray::<EventData>::new(0);
 
 
 
 #[kprobe]
 fn vfs_write(ctx: ProbeContext) -> Result<(), i64> {
-    let fail: u8 = 1;
-
-    let val : i64 = match try_vfs_write(&ctx){
-        Ok(x) => x,
-        Err(x) => x,
-    };
-    Ok(())
+    unsafe{
+        let fail: u8 = 1;
+    
+        let file: *const vmlinux::file = match ctx.arg(0){
+            None => return Err(2i64),
+            Some(x) => x,
+        };
+        let path = bpf_probe_read_kernel(&(*file).f_path)?;
+        let dent: *const vmlinux::dentry = path.dentry;
+    
+        let val : i64 = match try_dentry(&ctx , dent, 0){
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        Ok(())
+    }
 }
 
-unsafe fn in_dir(file: *const vmlinux::file, dir_inode: u64) -> bool {
+//int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry, umode_t mode)
+#[kprobe]
+fn vfs_mkdir(ctx: ProbeContext) -> Result<(), i64> {
+    unsafe{
+        let fail: u8 = 1;
+    
+        // let file: *const vmlinux::file = match ctx.arg(function_parameter_index_file){
+        //     None => return Err(2i64),
+        //     Some(x) => x,
+        // };
+        // let path = bpf_probe_read_kernel(&(*file).f_path)?;
+        // let dent: *const vmlinux::dentry = path.dentry;
+    
+        let entry: *const vmlinux::dentry = match ctx.arg(2){
+            None => return Err(2i64),
+            Some(x) => x,
+        };
+        //let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&(*entry).d_parent)?;
+
+        let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&(*entry).d_parent)?;
+    
+        let val : i64 = match try_dentry(&ctx,dent, 1){
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        Ok(())
+    }
+}
+
+//int vfs_rmdir(struct mnt_idmap *, struct inode *, struct dentry *);
+#[kprobe]
+fn vfs_rmdir(ctx: ProbeContext) -> Result<(), i64> {
+    unsafe{
+        let fail: u8 = 1;
+    
+        let entry: *const vmlinux::dentry = match ctx.arg(2){
+            None => return Err(2i64),
+            Some(x) => x,
+        };
+        //let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&(*entry).d_parent)?;
+
+        let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&entry)?;
+    
+        let val : i64 = match try_dentry(&ctx,dent, 2){
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        Ok(())
+    }
+}
+
+#[kprobe]
+fn vfs_rename(ctx: ProbeContext) -> Result<(), i64> {
+    unsafe{
+        let fail: u8 = 1;
+    
+        let rndata: *const vmlinux::renamedata = match ctx.arg(0){
+            None => return Err(2i64),
+            Some(x) => x,
+        };
+        //let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&(*entry).d_parent)?;
+
+        let dent: *const vmlinux::dentry = bpf_probe_read_kernel(&(*rndata).old_dentry)?;
+    
+        let val : i64 = match try_dentry(&ctx,dent, 3){
+            Ok(x) => x,
+            Err(x) => x,
+        };
+        Ok(())
+    }
+}
+
+unsafe fn in_dir(dent: *const vmlinux::dentry, dir_inode: u64) -> bool {
     //let mut fullLength = 1;
     //
     unsafe{
         // Read the dentry pointer from the file struct
-        let dentry: *const vmlinux::dentry = match bpf_probe_read_kernel(&(*file).f_path.dentry) {
-            Ok(dent) => dent,
-            Err(_) => return false, // If reading dentry fails, return early
-        };
-        let mut current_dentry: *const vmlinux::dentry = dentry;
+        // let dentry: *const vmlinux::dentry = match bpf_probe_read_kernel(&(*file).f_path.dentry) {
+        //     Ok(dent) => dent,
+        //     Err(_) => return false, // If reading dentry fails, return early
+        // };
+        let mut current_dentry: *const vmlinux::dentry = dent;
 
         // Traverse up the directory structure by following parent dentries
         for i in 0..50 {  // Max depth of 10 to avoid infinite loops
@@ -212,39 +300,32 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth:
 }
 
 
-fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
+fn try_dentry(ctx: &ProbeContext, dent: *const vmlinux::dentry, call_type: u8) -> Result<i64, aya_ebpf::cty::c_long> {
     unsafe {
         let key: u32 = 0; // Assuming a single key for now
         let dir_inode = match INODEDATA.get(key) {
             Some(inode) => inode,
             None => return Err(2i64),
         };
-        let file: *const vmlinux::file = match ctx.arg(0){
-            None => return Err(2i64),
-            Some(x) => x,
-        };
-        
 
-        if (!in_dir(file,*dir_inode)){
-            // info!(ctx, "yeah");
+        // let path = bpf_probe_read_kernel(&(*file).f_path)?;
+        // let dent = path.dentry;
+
+        if (!in_dir(dent,*dir_inode)){
+            // info!(ctx, "yeah");filename
             push_value_to_array(0, 0u8, &BUF);
             return Ok(0i64);
         }
+        // let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
+        //     Err(x) => {
+        //         info!(ctx, "Error on d_inode {}", x);
+        //         return Err(3i64);
+        //     },
+        //     Ok(x) => x,
+        // };
 
-        let path = bpf_probe_read_kernel(&(*file).f_path)?;
-        let dent = path.dentry;
-        let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
-            Err(x) => {
-                info!(ctx, "Error on d_inode {}", x);
-                return Err(3i64);
-            },
-            Ok(x) => x,
-        };
-        let ino : u64 = bpf_probe_read_kernel(&(*inod).i_ino)?;
+        // let ino : u64 = bpf_probe_read_kernel(&(*inod).i_ino)?;
 
-        if (dent.is_null()){
-            return Ok(0i64);
-        }
 
 
         /* dnameToMap() Example */
@@ -252,12 +333,15 @@ fn try_vfs_write(ctx: &ProbeContext) -> Result<i64, aya_ebpf::cty::c_long> {
         //let msgLen = dnameToMap(dent,&BUF,1);
         //Pushes length to 0 Index of buffer for displaying on userside
         //push_value_to_array(0, msgLen as u8, &BUF);
-
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        let len = pathToMap(dent,&BUF,50, ctx, *dir_inode);
-        EVENTS.output(ctx, &(len as u16), 0);
-        
+        let len = pathToMap(dent,&BUF,10, ctx, *dir_inode);
+        let event_data = EventData {
+            len: len as u16, // Existing length value, cast to u16
+            event_type: call_type,   // Example event type (you can change it based on your use case)
+        };
+        //EVENTS.output(ctx, &(len as u16), 0);
+        EVENTS.output(ctx, &event_data, 0);
     };
     Ok(0i64)
 }

@@ -62,9 +62,29 @@ async fn main() -> Result<(), anyhow::Error> {
     //     // This can happen if you remove all log statements from your eBPF program.
     //     warn!("failed to initialize eBPF logger: {}", e);
     // }
-    let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
-    program.load()?;
-    program.attach("vfs_write", 0)?;
+    {
+        let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
+        program.load()?;
+        program.attach("vfs_write", 0)?;
+    }
+
+    {
+        let program: &mut KProbe = bpf.program_mut("vfs_mkdir").unwrap().try_into()?;
+        program.load()?;
+        program.attach("vfs_mkdir", 0)?;
+    }
+
+    {
+        let program: &mut KProbe = bpf.program_mut("vfs_rmdir").unwrap().try_into()?;
+        program.load()?;
+        program.attach("vfs_rmdir", 0)?;
+    }
+
+    {
+        let program: &mut KProbe = bpf.program_mut("vfs_rename").unwrap().try_into()?;
+        program.load()?;
+        program.attach("vfs_rename", 0)?;
+    }
 
     //*Lets read the config file */
     let conf_file : fs::File = match fs::File::open("./config.json"){
@@ -91,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let watch_dir_string : String = String::from(watch_dir);
     // Debugging data
     // println!("Conf file output: {}", &watch_dir);
-    // Get the metadata from the watch_dir
+    // Get the metadata from the watch_dirvfs_mkdir
     let w_dir = match fs::metadata(watch_dir){
         Ok(x) => x,
         Err(e) => {
@@ -172,6 +192,19 @@ async fn main() -> Result<(), anyhow::Error> {
                         let buf = &mut buffers[i];
                         let len = buf.get_u8();
                         let len2 = buf.get_u8();
+                        let data = buf.get_u8();
+
+                        println!("{}",data);
+                        
+
+                        match data {
+                            0 => println!("vfs_write:"),
+                            1 => println!("vfs_mkdir"),
+                            2 => println!("vfs_rmdir"),
+                            3 => println!("vfs_rename"),
+                            _ => panic!("Error: Undetermined Call"), // `_` is a catch-all pattern for any other case
+                        }
+
                         // We have the 2 u8's that consist of a u16
                         // Even though get_u16() existed, it gave me really large numbers
                         // So I instead combined two u8's
@@ -207,7 +240,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             }
                         }
                         filename.push('/'); 
-                        println!("{}",filename);
+                        //println!("{}",filename);
                         // Correct reversed path
                         let corrected_path: String = filename
                             .split('/')
@@ -224,7 +257,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
                         // Extract deltas
                         if(!shouldFilter){
-                            send_full_contents_of_file(final_path.as_str());
+                            // send_full_contents_of_file(final_path.as_str());
                         }
                     }
                 }
