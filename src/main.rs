@@ -4,5 +4,5 @@ mod server;
 // use std::path::Path;
 
 fn main() {
-    let _= server::main();
+    let _= server::main_tcp();
 }
