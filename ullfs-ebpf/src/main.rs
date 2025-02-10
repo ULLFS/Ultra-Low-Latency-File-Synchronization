@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(warnings)]
-// #![feature(asm_experimental_arch)]
+
 mod vmlinux;
 
 use vmlinux::{file, inode, path, vfsmount, renamedata, dentry, qstr};
@@ -30,15 +30,15 @@ use aya_ebpf::maps::perf::PerfEventArray;
 const MAX_BUFFER_SIZE: usize = 1024;
 
 
-#[repr(C)]  // This ensures the struct has a stable memory layout, useful for FFI or sending over buffers.
+#[repr(C)]
 struct EventData {
     len: u16,        // Length (2 bytes)
     event_type: u8,  // The type of the event (1 byte)
 }
 
 #[map]
-pub static mut BUF: PerCpuArray<u8> = PerCpuArray::with_max_entries(4096, 0);
-#[map] // 
+pub static mut BUF: PerCpuArray<[u8; 64]> = PerCpuArray::with_max_entries(4096, 0);
+#[map] 
 static INODEDATA: Array<u64> =
     Array::<u64>::with_max_entries(MAX_BUFFER_SIZE as u32, 0);
 #[map]
@@ -195,7 +195,7 @@ unsafe fn in_dir(dent: *const vmlinux::dentry, dir_inode: u64) -> bool {
 }
 
 //fills BUFFER at arrayOffset with characters in d_name.name
-unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, arrayOffset: u32, ctx : &ProbeContext) -> u32 {
+unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<[u8; 64]>, arrayOffset: u32, ctx : &ProbeContext) -> u32 {
     
     let mut end:bool = false;
     let qstring = match bpf_probe_read_kernel(&(*dent).d_name) {
@@ -221,15 +221,17 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, array
                 end = true;
             }
 
-            for i in 0..64{
-                if i + n * 64 >= msgLen {
-                    // push_value_to_array(n * 64 + arrayOffset + i, 47 as u8, &array);
-                    break;
-                }
-                push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
+            push_value_to_array(n + arrayOffset, name, &array);
 
-                // EVENTS.output_at_index(ctx, n * 64 + arrayOffset + i, &name[i as usize], 0);
-            }
+            // for i in 0..64{
+            //     if i + n * 64 >= msgLen {
+            //         // push_value_to_array(n * 64 + arrayOffset + i, 47 as u8, &array);
+            //         break;
+            //     }
+            //     push_value_to_array(n * 64 + arrayOffset + i, name[i as usize], &array);
+
+            //     // EVENTS.output_at_index(ctx, n * 64 + arrayOffset + i, &name[i as usize], 0);
+            // }
             
             //return length
         }
@@ -246,8 +248,12 @@ unsafe fn dnameToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, array
 
 //Just runs dnameToMap n times to get dnames up the directory
 //This function is assumes the first element in buffer is length so if that changes it would need updating
-unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth: u8, ctx: &ProbeContext, dir_inode: u64) -> u32{
+unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<[u8; 64]>, depth: u8, ctx: &ProbeContext, dir_inode: u64) -> u32{
     let mut fullLength = 1;
+    let mut arrayOffset = 1;
+
+    let mut slash: [u8; 64] = [0; 64]; // Initialize all elements to 0
+    slash[0] = 47; // Set the first element to 47
     
     //This loops just mimics in_dir to search up directories
     let mut current_dentry: *const vmlinux::dentry = dent;
@@ -277,11 +283,13 @@ unsafe fn pathToMap(dent: *const vmlinux::dentry,array: &PerCpuArray<u8>, depth:
         }
 
         //Updates map then offsets position in map by "len"
-        let len = dnameToMap(current_dentry,&array,fullLength, ctx);
+        let len = dnameToMap(current_dentry,&array,arrayOffset, ctx);
+        arrayOffset += 1;
         fullLength += len;
 
         //Add slash (47)
-        push_value_to_array(fullLength, 47 as u8, &array);
+        push_value_to_array(arrayOffset, slash, &array);
+        arrayOffset += 1;
         fullLength += 1;
         
         //47 as u8;
@@ -313,7 +321,7 @@ fn try_dentry(ctx: &ProbeContext, dent: *const vmlinux::dentry, call_type: u8) -
 
         if (!in_dir(dent,*dir_inode)){
             // info!(ctx, "yeah");filename
-            push_value_to_array(0, 0u8, &BUF);
+            push_value_to_array(0, [0u8; 64], &BUF);
             return Ok(0i64);
         }
         // let inod = match bpf_probe_read_kernel(&(*dent).d_inode){
@@ -335,7 +343,7 @@ fn try_dentry(ctx: &ProbeContext, dent: *const vmlinux::dentry, call_type: u8) -
         //push_value_to_array(0, msgLen as u8, &BUF);
         /* pathToMap() Example */
         //Run's dnameToMap to depth 3 
-        let len = pathToMap(dent,&BUF,10, ctx, *dir_inode);
+        let len = pathToMap(dent,&BUF, 50, ctx, *dir_inode);
         let event_data = EventData {
             len: len as u16, // Existing length value, cast to u16
             event_type: call_type,   // Example event type (you can change it based on your use case)

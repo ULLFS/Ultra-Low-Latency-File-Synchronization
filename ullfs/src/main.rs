@@ -1,4 +1,4 @@
-use aya::maps::{PerCpuArray, PerfEventArray};
+use aya::maps::{array, PerCpuArray, PerfEventArray};
 use aya::programs::KProbe;
 use aya::util::online_cpus;
 use aya::Ebpf;
@@ -142,7 +142,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // l
         // tokio::time::sleep
         let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
-        let buf_array: PerCpuArray<_,u8> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
+        let buf_array: PerCpuArray<_,[u8;64]> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
             Ok(x) => x,
             Err(_) => {
                 panic!("PerCpuArray failed to initialize");
@@ -220,26 +220,36 @@ async fn main() -> Result<(), anyhow::Error> {
                         };
 
                         let mut filename = String::new();
-                        for i in 1..totalLen{
-                            let val : u8 = match s_buf_clone.get(&(i as u32), 0){
+                        let mut arrayIndex = 1;
+                        println!("totalLen: {}", totalLen);
+
+                        let mut itteration = 1;
+                        while itteration <= totalLen{
+                            let val : [u8; 64] = match s_buf_clone.get(&(arrayIndex as u32), 0){
                                 Ok(x) => {
                                     match x.get(cpu_id as usize){
                                         Some(y) => *y,
-                                        None => 0,
+                                        None => [0;64],
                                     }
                                 },
-                                Err(_) => 0,
+                                Err(_) => [0;64],
                             };
+                            arrayIndex += 1;
+                            println!("{}", arrayIndex);
                         
-                            if val == 0{
+                            if val == [0;64]{
                                 filename.push(166 as char); // ¦ for empty spaces for debugging
+                                itteration += 1;
                             }
                             else{
-        
-                                filename.push(val as char); // Convert u8 to char and push to String
+                                for &byte in val.iter().take_while(|&&c| c != 0) {
+                                    filename.push(byte as char); // Convert non-null bytes to chars
+                                    itteration += 1;
+                                }
+                                //filename.push(val as char); // Convert u8 to char and push to String
                             }
                         }
-                        filename.push('/'); 
+                        //filename.push('/'); 
                         //println!("{}",filename);
                         // Correct reversed path
                         let corrected_path: String = filename
