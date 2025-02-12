@@ -3,13 +3,130 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::net::{TcpStream, UdpSocket};
 use std::time::Duration;
-use crate::fileFilter::Filter; // Import the Filter struct for connection details
 
+use xxhash_rust::xxh3;
+
+use crate::fileFilter::Filter; // Import the Filter struct for connection details
+use crate::fileDifs::FileData;
 // Constants for packet size and acknowledgment timeout
 const PACKET_SIZE: usize = 1024; // Size of each packet to be sent
+const HEADER_SIZE: usize = 32;
 const ACK_TIMEOUT: Duration = Duration::from_secs(1); // Timeout for acknowledgment reception
 
-pub fn send_full_contents_of_file_udp(filename: &str) -> io::Result<()> {
+
+
+
+fn create_packet_wrapper(id: u64, cur_packet: u64, num_packets: u64, data: &Vec<u8>) -> Vec<u8>{
+    if data.len() > PACKET_SIZE - HEADER_SIZE {
+        panic!("Data was too large, data size: {}", data.len());
+    }
+    let mut buffer: Vec<u8> = Vec::new();
+    // First eight bytes are id
+    let id_bytes = id.to_be_bytes();
+    buffer.push(id_bytes[0]);
+    buffer.push(id_bytes[1]);
+    buffer.push(id_bytes[2]);
+    buffer.push(id_bytes[3]);
+    buffer.push(id_bytes[4]);
+    buffer.push(id_bytes[5]);
+    buffer.push(id_bytes[6]);
+    buffer.push(id_bytes[7]);
+    let cur_packet_bytes = cur_packet.to_be_bytes();
+    buffer.push(cur_packet_bytes[0]);
+    buffer.push(cur_packet_bytes[1]);
+    buffer.push(cur_packet_bytes[2]);
+    buffer.push(cur_packet_bytes[3]);
+    buffer.push(cur_packet_bytes[4]);
+    buffer.push(cur_packet_bytes[6]);
+    buffer.push(cur_packet_bytes[5]);
+    buffer.push(cur_packet_bytes[7]);
+    // Second eight bytes are number of packets in the sequence
+    let num_packets_bytes = num_packets.to_be_bytes();
+    buffer.push(num_packets_bytes[0]);
+    buffer.push(num_packets_bytes[1]);
+    buffer.push(num_packets_bytes[2]);
+    buffer.push(num_packets_bytes[3]);
+    buffer.push(num_packets_bytes[4]);
+    buffer.push(num_packets_bytes[5]);
+    buffer.push(num_packets_bytes[6]);
+    buffer.push(num_packets_bytes[7]);
+    
+    for d in data {
+        buffer.push(*d);
+    }
+    let hash = xxh3::xxh3_64(&buffer);
+    let hash_bytes = hash.to_be_bytes();
+    buffer.push(hash_bytes[0]);
+    buffer.push(hash_bytes[1]);
+    buffer.push(hash_bytes[2]);
+    buffer.push(hash_bytes[3]);
+    buffer.push(hash_bytes[4]);
+    buffer.push(hash_bytes[5]);
+    buffer.push(hash_bytes[6]);
+    buffer.push(hash_bytes[7]);
+    return buffer;
+    
+    
+}
+fn create_delta_packet(start_pos: usize, end_pos: usize, delta: Vec<u8>){
+    let mut out_vec: Vec<u8> = Vec::new();
+    out_vec.push(1u8); // Byte of 1 means that the packet contains deltas 
+    for b in start_pos.to_be_bytes() {
+        out_vec.push(b);
+    }
+    for b in end_pos.to_be_bytes() {
+        out_vec.push(b);
+    }
+    for b in delta {
+        out_vec.push(b);
+    }
+    let mut i = 0;
+    let mut v : Vec<u8> = Vec::new();
+    let mut count_out    = 0;
+    let f_num_packets: f32 = (out_vec.len() as f32) / ((PACKET_SIZE - HEADER_SIZE) as f32);
+    let num_packets: u64 = f_num_packets.ceil() as u64;
+    for b in out_vec {
+        v.push(b);
+        if i > PACKET_SIZE - HEADER_SIZE {
+            i = 0;
+            //TODO: Update id to be an incrementing value over the lifetime of the program
+            let packet = create_packet_wrapper(0, count_out, num_packets, &v);
+            
+            count_out += 1;
+            v.clear();
+        } else {
+            i += 1;
+        }
+    }
+    
+    
+}
+// fn create_full_file_packet(filepath: &str){
+//     let mut file = File::open(filepath).expect("File did not exist");
+//     let mut first_buffer: [u8; PACKET_SIZE - HEADER_SIZE - 1] = [0; PACKET_SIZE - HEADER_SIZE - 1];
+//     let mut buffer: [u8; PACKET_SIZE - HEADER_SIZE] = [0; PACKET_SIZE - HEADER_SIZE];
+//     file.read(&mut first_buffer);
+//     let i = 1;
+//     for b in first_buffer {
+//         buffer[i] = b;
+//         i += 1;
+//     }
+//     let p = create_packet_wrapper(0, 0, file.metadata().unwrap().len(), &buffer.to_vec());
+//     loop {
+//         file.read(&mut buffer);
+//         // create_packet_wrapper(0, cur_packet, num_packets, data)
+//     }
+    
+// }
+pub fn send_full_contents_of_file(filename: &str) -> io::Result<()> {
+    let f = FileData::get_instance();
+    let delta = f.get_file_delta(filename);
+    println!("File data for {}: {}, {:?}, {}", filename, delta.0, delta.2, delta.1);
+    Ok(())
+}
+
+pub fn send_full_contents_of_file_old(filename: &str) -> io::Result<()> {
+
     // Create a UDP socket bound to an ephemeral port
     let socket: UdpSocket = UdpSocket::bind("0.0.0.0:0").expect("OS unable to bind socket.");
 

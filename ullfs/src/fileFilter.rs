@@ -13,6 +13,7 @@ pub struct Filter{
     baseDir: String,
     dns_web_address: String,
     client_port: String,
+    current_id: u64
 }
 
 impl Filter{
@@ -83,6 +84,7 @@ impl Filter{
             baseDir: watch_dir,
             dns_web_address: f_dns_web_address,
             client_port: f_client_port,
+            current_id: 0
         }
         
     }

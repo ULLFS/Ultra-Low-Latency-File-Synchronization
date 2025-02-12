@@ -4,35 +4,38 @@ use aya::util::online_cpus;
 use aya::Ebpf;
 use aya::{
     include_bytes_aligned,
-    Bpf,
-    maps::{HashMap,Array},
+    maps::Array,
 };
 use client::send_full_contents_of_file_tcp;
 use env_logger::filter;
 use filehasher::hash_check;
 use std::sync::Arc;
-use aya_log::BpfLogger;
-use libc::SIGINT;
-use log::{info, warn, debug};
-use tokio::signal::unix::{signal,SignalKind};
-use tokio::signal;
+use log::debug;
 use std::fs;
-use std::ops::Index;
-use std::os::linux::raw;
 use std::process;
 use std::io::BufReader;
 use serde_json::{self, Value};
 use aya::maps::AsyncPerfEventArray;
-use std::{error::Error, thread};
-use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use bytes::{Buf, BytesMut};
 
 use tokio::task; // or async_std::task
+// use tokio::time::Sleep;
 mod client;
 pub mod filehasher;
 pub mod fileFilter;
+pub mod createPacket;
+pub mod fileDifs;
+pub mod hashFileDif;
+pub mod client_tcp;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // let dif = fileDifs::FileData::get_instance();
+    // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
+    // let t = tokio::signal::ctrl_c().await;
+    // let new = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
+    // println!("Old size: {}. New size: {}", old.1.len(), new.1.len());
+    // println!("New start: {}. New end: {}", new.0, new.2);
+    // return Ok(());
     env_logger::init();
     
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
@@ -62,6 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
     //     // This can happen if you remove all log statements from your eBPF program.
     //     warn!("failed to initialize eBPF logger: {}", e);
     // }
+
     {
         let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into()?;
         program.load()?;
@@ -118,9 +122,6 @@ async fn main() -> Result<(), anyhow::Error> {
             panic!("Error: Directory {} not found, something must be wrong with your config file\n{}", &watch_dir, e);
         }
     };
-    
-    
-    
     // Get the inode from the metadata
     let block_addr: u64 = std::os::linux::fs::MetadataExt::st_ino(&w_dir);
     println!("Block Address: {}", block_addr);
@@ -153,27 +154,12 @@ async fn main() -> Result<(), anyhow::Error> {
         for cpu_id in online_cpus().map_err(|(_, error)| error)? {
             // open a separate perf buffer for each cpu
             let mut buf = perf_array.open(cpu_id, None)?;
-            // let val_buf = buf_array.get(&1 , 0)?;
-            // let bufData: Array<_, u8> = match Array::try_from(bpf.take_map("BUF").unwrap()){
-            //     Ok(x) => x,
-            //     Err(_) => {
-            //         panic!("Error: Bufdata not set up properly");
-            //     }
-            // };
-            // let val = buf_array.get(&0, 0);
-            // process each perf buffer in a separate task
+
             let s_buf_clone = Arc::clone(&s_buf);
             
             task::spawn(async move {
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
-                
-                // let mut bufArray: PerCpuArray<_, u8> = match PerCpuArray::try_from(bpf.map_mut("BUF").unwrap()){
-                //     Ok(x) => x,
-                //     Err(_) => {
-                //         panic!("PerCPUArray failed to set up");
-                //     }
-                // };
-                
+
                 let mut buffers = (0..4)
                     .map(|_| BytesMut::with_capacity(4))
                     .collect::<Vec<_>>();
@@ -210,22 +196,24 @@ async fn main() -> Result<(), anyhow::Error> {
                         // So I instead combined two u8's
                         // We know the max size is 4096 so we can use values higher than that as error codes
                         // Or 0
-                        let totalLen: u16 = (len2 as u16 * 255u16) + len as u16;
+                        let total_len: u16 = (len2 as u16 * 255u16) + len as u16;
                         // println!("Event received {}: {}, {}", totalLen, len, len2);
-                        let cpus = match online_cpus().map_err(|(_, error)| error){
-                            Ok(x) => x,
-                            Err(_) => {
-                                panic!("Error getting online cpus");
-                            }
-                        };
+                        // let cpus = match online_cpus().map_err(|(_, error)| error){
+                        //     Ok(x) => x,
+                        //     Err(_) => {
+                        //         panic!("Error getting online cpus");
+                        //     }
+                        // };
 
                         let mut filename = String::new();
+
                         let mut arrayIndex = 1;
-                        println!("totalLen: {}", totalLen);
+                        println!("totalLen: {}", total_len);
 
                         let mut itteration = 1;
-                        while itteration <= totalLen{
+                        while itteration <= total_len{
                             let val : [u8; 64] = match s_buf_clone.get(&(arrayIndex as u32), 0){
+
                                 Ok(x) => {
                                     match x.get(cpu_id as usize){
                                         Some(y) => *y,
@@ -249,8 +237,6 @@ async fn main() -> Result<(), anyhow::Error> {
                                 //filename.push(val as char); // Convert u8 to char and push to String
                             }
                         }
-                        //filename.push('/'); 
-                        //println!("{}",filename);
                         // Correct reversed path
                         let corrected_path: String = filename
                             .split('/')
@@ -263,10 +249,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         // Now we actually get to deal with deltas
                         // Create the final path from the path we got and the watch directory
                         let final_path = String::from(filter.get_base_dir()) + corrected_path.as_str();
-                        let shouldFilter = filter.should_filter(final_path.as_str());
+                        let should_filter = filter.should_filter(final_path.as_str());
 
                         // Extract deltas
-                        if(!shouldFilter){
+                        if (!should_filter) {
                             // send_full_contents_of_file_tcp(final_path.as_str());
                         }
                     }
