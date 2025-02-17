@@ -1,25 +1,27 @@
 use std::{borrow::BorrowMut, collections::HashMap, fs, io::{BufRead, BufReader}, net::TcpStream, sync::{OnceLock, RwLock}};
 
 use serde_json::Value;
+use std::io::{Write, Read};
 
+use crate::fileFilter;
 
-static INSTANCE :OnceLock<connections> = OnceLock::new();
-struct connections {
+static INSTANCE :OnceLock<Connections> = OnceLock::new();
+struct Connections {
     addresses: RwLock<HashMap<&'static String, &'static TcpStream>>,
     connections: u32,
     port: u32
 }
-impl connections {
+impl Connections {
     pub fn new() -> Self {
         
-        connections {
+        Connections {
             addresses: RwLock::new(HashMap::new()),
             connections: 0,
             port: 0
         }
     }
-    pub fn get_instance() -> &'static connections{
-        INSTANCE.get_or_init(|| connections::new())
+    pub fn get_instance() -> &'static Connections{
+        INSTANCE.get_or_init(|| Connections::new())
     }
     pub fn check_connections_config(&self) {
         let conf_file : fs::File = match fs::File::open("./config.json"){
@@ -37,22 +39,70 @@ impl connections {
             }
         };
         let addresses_conf = conf["dns_web_addresses"].as_array().expect("Dns_web_addresses not an array or was malformed");
-        let mut addr = self.addresses.write().unwrap();
+        ;
         for address in addresses_conf {
             let address_string = address.to_string();
+            let mut addr = self.addresses.write().unwrap();
             if addr.contains_key(&address_string){
                 let stream = addr.get(&address_string).expect("Couldn't get TcpStream");
                 
             } else {
-                let stream_address = TcpStream::connect(address_string).expect("Failed to connect to server");
-                let stream_static: &'static TcpStream = Box::leak(Box::new(stream_address));
-                let address_static: &'static String = Box::leak(Box::new(address.to_string()));
-                addr.insert(address_static, stream_static);
+                match TcpStream::connect(&address_string) {
+                     Ok(x) => {
+                        
+                        let stream_static: &'static TcpStream = Box::leak(Box::new(x));
+                        let address_static: &'static String = Box::leak(Box::new(address.to_string()));
+                        addr.insert(address_static, stream_static);
+                     }
+                     Err(_) => {
+                         println!("Failed to connect to server {}", address_string);
+                     }
+                 }
+                
             }
         }
     }
 }
-pub fn write_to_connections(){
-    
+pub fn write_full_file_to_connections(filepath: &str){
+    let mut addr = Connections::get_instance().addresses.write().unwrap();
+    for (address, connection) in addr.iter() {
+        let mut c = *connection;
+        let base_path = fileFilter::Filter::get_instance().get_base_dir();
+        let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
+        let mut relative_path_bytes = relative_path.into_bytes();
+        relative_path_bytes.push(0b0000);
+        // Relative path now ends with a null byte which will never be allowed in a file name
+        // This is one of two characters that are completely illegal
+        relative_path_bytes.push(0b0001);
+        // Push identifier for the full file send
+        match c.write(relative_path_bytes.as_slice()){
+            Ok(x) => x,
+            Err(x) => {
+                println!("Error on writing relative path: {} on connection address: {}",x, address);
+                return;
+            }
+        };
+        
+        let mut buf = [0u8; 1024];
+        let mut f = fs::File::open(filepath).expect(format!("File not found somehow: {}", filepath).as_str());
+        let file_length = f.metadata().unwrap().len();
+        c.write(&file_length.to_be_bytes()).expect("Failed to write file length");
+        // let mut reader = BufReader::new(f);
+        loop {
+            let num_bytes = f.read(&mut buf).expect(format!("Failed to read file: {}", filepath).as_str());
+            match c.write(&buf[..num_bytes]){
+                Ok(x) => x,
+                Err(x) => {
+                    println!("Failed to write to connection: {} while writing file data. Error: {}", address, x);
+                    return;
+                }
+            };
+            if num_bytes == 0 {
+                break;
+            }
+        }
+        
+        
+    }
 }
 
