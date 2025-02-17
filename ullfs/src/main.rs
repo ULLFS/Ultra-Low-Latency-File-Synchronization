@@ -254,6 +254,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         // Extract deltas
                         if (!should_filter) {
                             // send_full_contents_of_file_tcp(final_path.as_str());
+                            client_tcp::write_full_file_to_connections(final_path.as_str());
                         }
                     }
                 }
@@ -265,7 +266,4 @@ async fn main() -> Result<(), anyhow::Error> {
     let t = tokio::signal::ctrl_c().await;
     println!("Exiting");
     Ok(())
-}
-fn coerce_static<'a, T>(v: &'a T) -> &'a T {
-    &v
 }
