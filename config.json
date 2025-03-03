@@ -1,0 +1,14 @@
+{
+    "watch_dir":"/home/zmanjaroschool/TestDir2",
+    "dns_web_addresses":[
+        "127.0.0.1"
+    ],
+    "server_port":"34254",
+    "ignore_ext":[".kate-swp"],
+    "ignore": [
+        
+    ],
+    "file_store_time_seconds":100,
+    "max_total_size_mb":1000
+    
+}
