@@ -1,6 +1,7 @@
 use std::{fs::{self}, io::{BufReader, Read}};
 // use bytes::Bytes;
 use serde_json::Value;
+use xxhash_rust::xxh3::{xxh3_64, Xxh3};
 use std::time::SystemTime;
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
@@ -14,6 +15,22 @@ impl File {
         File {
             data: data,
             start_time: start_time
+        }
+    }
+}
+pub struct Delta {
+    pub start_index: u64,
+    pub end_index: u64,
+    pub data: Vec<u8>,
+    pub old_hash: u64
+}
+impl Delta {
+    pub fn new(start_index: u64, end_index: u64, data: Vec<u8>, old_hash: u64) -> Self{
+        Delta {
+            start_index: start_index,
+            end_index: end_index,
+            data: data,
+            old_hash: old_hash
         }
     }
 }
@@ -71,7 +88,7 @@ impl FileData {
     // async fn timeout(){
         
     // }
-    pub fn get_file_delta(&self, path : &str) -> (usize, usize, Vec<u8>){
+    pub fn get_file_delta(&self, path : &str) -> Delta{
         println!("{}", path);
         let mut f = fs::File::open(&path).expect(format!("File not found {}", path).as_str());
         let mut buf : Vec<u8> = Vec::new();
@@ -100,7 +117,8 @@ impl FileData {
                 let path_static: &'static str = Box::leak(Box::new(path.to_string()));
                 let f_static : &'static File = Box::leak(Box::new(f));
                 map.insert(path_static, f_static);
-                return (0, 0, data_clone);
+                return Delta::new(0,0, data_clone, 0);
+                
             }
         };
         let output_data = get_delta(&file_data.data, &buf);
@@ -123,33 +141,36 @@ impl FileData {
     
     
 // }
-pub fn get_delta(a: &Vec<u8>, b: &Vec<u8>) -> (usize, usize, Vec<u8>) {
+pub fn get_delta(old: &Vec<u8>, new: &Vec<u8>) -> Delta {
     let mut start_index = 0;
     
     // Find the first index where the vectors differ
-    while start_index < a.len() && start_index < b.len() && a[start_index] == b[start_index] {
+    while start_index < old.len() && start_index < new.len() && old[start_index] == new[start_index] {
         start_index += 1;
     }
 
     // Find the last index where the vectors differ
-    let mut a_end = a.len();
-    let mut b_end = b.len();
-    while a_end > start_index && b_end > start_index && a[a_end - 1] == b[b_end - 1] {
-        a_end -= 1;
-        b_end -= 1;
+    let mut old_end = old.len();
+    let mut new_end = new.len();
+    while old_end > start_index && new_end > start_index && old[old_end - 1] == new[new_end - 1] {
+        old_end -= 1;
+        new_end -= 1;
     }
     
     // Determine the end index for deletion in `a`
-    let end_index = a_end;
+    let end_index = old_end;
     
     // Determine the data to be added (from `b` starting at `start_index` to `b_end`)
-    let data_to_add = if b_end > start_index {
-        b[start_index..b_end].to_vec()
+    let data_to_add = if new_end > start_index {
+        new[start_index..new_end].to_vec()
     } else {
         Vec::new()
     };
+    let old_data = xxh3_64(old);
     // REMINDER: When reading these deltas later, if end_index < start_index delete no bytes.
-    (start_index, end_index - 1, data_to_add)
+    // These are also 1 indexed in order to prevent errors when start index is 0 and we are only adding
+    return Delta::new((start_index + 1) as u64, end_index as u64, data_to_add, old_data)
+    // (start_index, end_index - 1, data_to_add)
     // If start_index <= end_index, delete all bytes between start and end including both
 }
 // pub async fn create_hash(filepath: String, basePath: String){
