@@ -1,13 +1,14 @@
 // use std::{fs, io::{stdin, Read}};
 
 use client_tcp::write_delta_file_to_connections;
+use ignore::Error;
 use xxhash_rust::xxh3::xxh3_64;
 
 mod client_tcp;
 mod fileFilter;
 mod fileDifs;
 
-use std::{fs, io::{stdin, stdout, BufReader, Read, Write}};
+use std::{fs, future::Future, io::{stdin, stdout, BufReader, Read, Write}};
 
 fn pause() {
     let mut stdout = stdout();
@@ -15,7 +16,8 @@ fn pause() {
     stdout.flush().unwrap();
     stdin().read(&mut [0]).unwrap();
 }
-fn main() {
+
+async fn test_deltas(){
     let base_dir = "/home/zmanjaroschool/TestDir2/";
     let full_file = "/home/zmanjaroschool/TestDir2/test.txt";
     let tests = ["test_add.txt", "test_remove.txt", "test_replace.txt", "test_add_to_end.txt", "test_add_to_start.txt", "test_add_single_char.txt"];
@@ -24,7 +26,7 @@ fn main() {
     full_file_fs.read_to_string(&mut file_data).expect("Failed to read data to string");
     let mut old_file_data_u8 = file_data.into_bytes();
     println!("Writing to connections");
-    client_tcp::write_full_file_to_connections(full_file);
+    client_tcp::write_full_file_to_connections(full_file).await;
     println!("Finished");
     pause();
     for test in tests {
@@ -38,9 +40,14 @@ fn main() {
         // let old_file_data_u8 = file_data.into_bytes();
         let delta = fileDifs::get_delta(&old_file_data_u8, &new_file_data_u8);
         old_file_data_u8 = new_file_data_u8;
-        write_delta_file_to_connections(&delta, full_file);
+        write_delta_file_to_connections(&delta, full_file).await;
         pause();
         
         
     }
+    
+}
+#[tokio::main]
+async fn main() {
+    test_deltas().await;
 }
