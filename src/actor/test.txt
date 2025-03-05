@@ -1,0 +1,135 @@
+use tokio::net::TcpStream;
+
+#[derive(Copy, Clone)]
+pub(crate) struct RuntimeState {
+    value: u64,
+    i_three: Option<NumberMessage>,
+    i_five: Option<NumberMessage>,
+    buffer: [u8; BATCH_SIZE], // Use a byte buffer for TCP streams
+}
+
+impl RuntimeState {
+    pub(crate) fn new(value: i32) -> Self {
+        RuntimeState {
+            value: value as u64,
+            i_three: None,
+            i_five: None,
+            buffer: [0; BATCH_SIZE], // Initialize the byte buffer
+        }
+    }
+}
+
+pub async fn run<const NUMBERS_RX_GIRTH: usize>(
+    context: SteadyContext,
+    numbers_rx: SteadyRxBundle<NumberMessage, NUMBERS_RX_GIRTH>,
+    tcp_streams_tx: SteadyTx<TcpStream>,
+    errors_tx: SteadyTx<ErrorMessage>,
+    state: SteadyState<RuntimeState>,
+) -> Result<(), Box<dyn Error>> {
+    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    internal_behavior(into_monitor!(context, numbers_rx, [tcp_streams_tx, errors_tx]), STOP_VALUE, listener, tcp_streams_tx, errors_tx, state).await
+}
+
+async fn internal_behavior<C: SteadyCommander, const NUMBERS_RX_GIRTH: usize>(
+    mut cmd: C,
+    stop_value: u64,
+    listener: TcpListener,
+    tcp_streams_tx: SteadyTx<TcpStream>,
+    errors_tx: SteadyTx<ErrorMessage>,
+    state: SteadyState<RuntimeState>,
+) -> Result<(), Box<dyn Error>> {
+    let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
+    if let Some(state) = state_guard.as_mut() {
+        let mut tcp_streams_tx = tcp_streams_tx.lock().await;
+        let mut errors_tx = errors_tx.lock().await;
+
+        while cmd.is_running(&mut || {
+            state.value == stop_value && tcp_streams_tx.mark_closed() && errors_tx.mark_closed()
+        }) {
+            let (stream, _) = listener.accept().await?;
+            let _done = cmd.send_async(&mut tcp_streams_tx, stream, SendSaturation::IgnoreAndWait).await;
+
+            state.value += 1;
+
+            if state.value == stop_value {
+                cmd.request_graph_stop();
+            }
+        }
+    } else {
+        warn!("missing state, unable to start actor");
+    }
+
+    Ok(())
+}
+
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+async fn process_tcp_stream<C: SteadyCommander>(
+    mut cmd: C,
+    mut stream: TcpStream,
+    errors_tx: SteadyTx<ErrorMessage>,
+) -> Result<(), Box<dyn Error>> {
+    let mut buffer = [0; 1024];
+    loop {
+        let n = stream.read(&mut buffer).await?;
+        if n == 0 {
+            break;
+        }
+        stream.write_all(&buffer[0..n]).await?;
+    }
+    Ok(())
+}
+
+pub async fn run_tcp_processor(
+    context: SteadyContext,
+    tcp_streams_rx: SteadyRx<TcpStream>,
+    errors_tx: SteadyTx<ErrorMessage>,
+) -> Result<(), Box<dyn Error>> {
+    internal_tcp_processor(into_monitor!(context, tcp_streams_rx, [errors_tx]), tcp_streams_rx, errors_tx).await
+}
+
+async fn internal_tcp_processor<C: SteadyCommander>(
+    mut cmd: C,
+    tcp_streams_rx: SteadyRx<TcpStream>,
+    errors_tx: SteadyTx<ErrorMessage>,
+) -> Result<(), Box<dyn Error>> {
+    let mut tcp_streams_rx = tcp_streams_rx.lock().await;
+    let mut errors_tx = errors_tx.lock().await;
+
+    while let Some(stream) = tcp_streams_rx.recv().await {
+        let _ = cmd.spawn(process_tcp_stream(cmd.clone(), stream, errors_tx.clone()));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use steady_state::*;
+    use super::*;
+    use tokio::net::TcpStream;
+
+    #[async_std::test]
+    async fn test_tcp_process() {
+        let mut graph = GraphBuilder::for_testing().with_telemetry_metric_features(false).build(());
+
+        let (tcp_streams_tx, tcp_streams_rx) = graph.channel_builder().with_capacity(1000).build();
+        let (errors_tx, test_errors_tx) = graph.channel_builder().with_capacity(4).build();
+
+        graph.actor_builder()
+            .with_name("TcpProcessor")
+            .build_spawn(move |context| run_tcp_processor(context, tcp_streams_rx.clone(), errors_tx.clone()));
+
+        graph.start(); // Start the graph
+
+        // Simulate a TCP connection
+        let stream = TcpStream::connect("127.0.0.1:8080").await.unwrap();
+        tcp_streams_tx.send(stream).await.unwrap();
+
+        graph.request_stop(); // Request to stop the graph
+        graph.block_until_stopped(Duration::from_secs(15));
+
+        // Add assertions to verify the behavior
+    }
+}
