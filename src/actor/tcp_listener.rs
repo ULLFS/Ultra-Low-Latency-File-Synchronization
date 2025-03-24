@@ -68,11 +68,21 @@ async fn internal_behavior<C: SteadyCommander>(
         while cmd.is_running(&mut || 
             tcp_msg_rx.is_closed_and_empty() && tcp_conn_tx.mark_closed()
         ) {
-            let (stream, _) = listener.accept().await?;
+            let (stream, _) = match listener.accept().await{
+                Ok(x) => x,
+                Err(e) => {
+                    if (e.kind() == std::io::ErrorKind::WouldBlock) {
+                        continue;
+                    } else {
+                        panic!("(tcp_listener) Error accepting connection: {:?}", e);
+                    }
+                }
+            };
             //let _clean = await_for_all!(cmd.wait_vacant_units(&mut tcp_conn_tx, 1024));
             println!("(tcp_listener) Attemping to forward the connection over to the tcp_worker");
             let _done = cmd.send_async(&mut tcp_conn_tx, stream, SendSaturation::IgnoreAndWait).await;
         }
+            
     } else {
         warn!("missing state, unable to start actor");
     }
