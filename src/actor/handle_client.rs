@@ -7,6 +7,7 @@ use std::{env::temp_dir, error::Error, fs::{self, File}, io::{BufRead, BufReader
 use tokio::net::{TcpStream, TcpListener};
 // use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 use xxhash_rust::xxh3::xxh3_64;
+const HOMEDIR: &str = "";
 #[derive(PartialEq, Eq)]
 enum State {
     Filepath,
@@ -23,7 +24,7 @@ enum State {
 }
 // use std::io::Write;
 
-const SAVE_PATH: &str = "/home/trevor/Documents/TestDir3";
+const SAVE_PATH: &str = "/home/zmanjaroschool/TestDir3";
 
 fn ask_for_file(file: &String, stream: &TcpStream){
     println!("Got the wrong hash for the file: {}", file);
@@ -50,7 +51,7 @@ fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, re
         2u8 => {
             *cur_index = 0;
             println!("Changing to file delta state");
-            let local_path = format!("/home/trevor/Documents/TestDir3{}", filepath);
+            let local_path = format!("{}/{}", SAVE_PATH, filepath);
             println!("File: {}", local_path);
             let f = fs::File::open(&local_path).expect("Failed to open the file for deltas");
             *writer = Some(BufWriter::new(f));
@@ -75,7 +76,7 @@ fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<Fil
         println!("Changing to filedata state");
         *state = State::FileData;
         *cur_index = 0;
-        let local_path = format!("/home/trevor/Documents/TestDir3{}", filepath);
+        let local_path = format!("{}/{}", SAVE_PATH, filepath);
         // if !fs::exists(&local_path).expect("Why would this ever error, error on fs exists") {
         //     fs::File::create(&local_path).expect(format!("Failed to create file that didn't exist {}", local_path).as_str());
         // }
