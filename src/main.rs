@@ -19,20 +19,19 @@ fn main() {
     let service_executable_name = "simple_tcp_server";
     let service_user = "simple_tcp_server_user";
     let systemd_command = SystemdBuilder::process_systemd_commands(  opt.systemd_action()
-                                                   , opt.to_cli_string(service_executable_name)
-                                                   , service_executable_name
-                                                   , service_user);
+                                                        ,service_executable_name
+                                                        ,service_user);
 
     if !systemd_command {
+
         info!("Starting up");
-        let mut graph = build_graph(GraphBuilder::default().build(opt.clone()) );
-        graph.loglevel(&opt.loglevel);
+
+        let mut graph = build_graph(GraphBuilder::for_production()
+                                .with_telemtry_production_rate_ms(200)
+                                .build(opt.clone()) );
+
         graph.start();
 
-        /* {  //remove this block to run forever.
-           std::thread::sleep(Duration::from_secs(60));
-           graph.request_stop(); //actors can also call stop as desired on the context or monitor
-        } */
 
         graph.block_until_stopped(Duration::from_secs(2));
     }

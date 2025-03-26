@@ -71,7 +71,7 @@ async fn internal_behavior<C: SteadyCommander>(
             let (stream, _) = match listener.accept().await{
                 Ok(x) => x,
                 Err(e) => {
-                    if (e.kind() == std::io::ErrorKind::WouldBlock) {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
                         continue;
                     } else {
                         panic!("(tcp_listener) Error accepting connection: {:?}", e);

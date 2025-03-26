@@ -8,7 +8,7 @@ use steady_state::*;
 use crate::{actor::handle_client, Args};
 use std::error::Error;
 use tokio::net::TcpStream;
-use std::io;
+//use std::io;
 
 const BUFFER_SIZE: usize = 4096;
 
@@ -48,7 +48,7 @@ async fn internal_behavior<C: SteadyCommander>(
     let mut tcp_conn_rx = tcp_conn_rx.lock().await;
 
     while cmd.is_running(&mut || tcp_conn_rx.is_closed_and_empty()) {
-        let clean = await_for_all!(cmd.wait_avail_units(&mut tcp_conn_rx, 1)    );
+        let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
         
         match cmd.try_take(&mut tcp_conn_rx) {
             Some(stream) => {
