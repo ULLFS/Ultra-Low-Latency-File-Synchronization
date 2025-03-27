@@ -41,20 +41,23 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     //this common root of the channel builder allows for common config of all channels
     let base_channel_builder = graph.channel_builder()
-        .with_type()
-        .with_line_expansion(1.0f32);
+    .with_filled_trigger(Trigger::AvgBelow(Filled::p90()), AlertColor::Red)
+    .with_type()
+    .with_line_expansion(1.0f32);
 
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
-        .with_mcpu_percentile(Percentile::p80())
-        .with_load_percentile(Percentile::p80());
+        /* .with_mcpu_percentile(Percentile::p80())
+        .with_load_percentile(Percentile::p80()); */
+        .with_thread_info();
+
 
     //build channels
     
     let (tcplisteneractor_tcp_conn_tx, tcpworkeractor_tcp_conn_rx) = base_channel_builder
         .with_capacity(1024)
         .build();
-    
+
     let (tcpworkeractor_tcp_msg_tx, tcplisteneractor_tcp_msg_rx) = base_channel_builder
         .with_capacity(1024)
         .build();
@@ -64,23 +67,28 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
      let state = new_state();
     
-     base_actor_builder.with_name("TcpListenerActor")
+     base_actor_builder.with_name("Tcp Listener")
                  .build( move |context| actor::tcp_listener::run(context
                                             , tcplisteneractor_tcp_msg_rx.clone()
-                                            , tcplisteneractor_tcp_conn_tx.clone(), state.clone() )
+                                            , tcplisteneractor_tcp_conn_tx.clone()
+                                            , state.clone() )
                   , &mut Threading::Spawn );
     }
+
     {
      let state = new_state();
     
-     base_actor_builder.with_name("TcpWorkerActor")
+     base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
                                             , tcpworkeractor_tcp_conn_rx.clone()
-                                            , tcpworkeractor_tcp_msg_tx.clone(), state.clone() )
+                                            , tcpworkeractor_tcp_msg_tx.clone()
+                                            , state.clone() )
                   , &mut Threading::Spawn );
     }
+
     graph
 }
+
 #[cfg(test)]
 mod graph_tests {
     use async_std::test;
