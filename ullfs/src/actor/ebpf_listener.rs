@@ -25,7 +25,7 @@ use tokio::task; // or async_std::task
 
 pub async fn run(context: SteadyContext
     ,tcp_msg_rx: SteadyRx<TcpStream>
-    ,tcp_conn_tx: SteadyTx<TcpStream>, state: SteadyState<RuntimeState>
+    ,tcp_conn_tx: SteadyTx<TcpStream>
 ) -> Result<(),Box<dyn Error>> {
     // let dif = fileDifs::FileData::get_instance();
     // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");

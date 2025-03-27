@@ -31,7 +31,7 @@ fn main() {
     if !systemd_command {
         info!("Starting up");
         let mut graph = build_graph(GraphBuilder::default().build(opt.clone()) );
-        graph.loglevel(&opt.loglevel);
+        // graph.loglevel(&opt.loglevel);
         graph.start();
 
         /* {  //remove this block to run forever.
@@ -68,12 +68,12 @@ fn build_graph(mut graph: Graph) -> Graph {
     //build actors
     
     {
-     let state = new_state();
+    //  let state = new_state();
     
      base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
                                             , ebpf_listener_conn_rx.clone()
-                                            , ebpf_listener_conn_tx.clone(), state.clone() )
+                                            , ebpf_listener_conn_tx.clone())
                   , &mut Threading::Spawn );
     }
     {
