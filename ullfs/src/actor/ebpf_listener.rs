@@ -23,9 +23,27 @@ use crate::{client_tcp, fileFilter};
 use tokio::task; // or async_std::task
 // use tokio::time::Sleep;
 
+const BATCH_SIZE: usize = 7000;
+
+#[derive(Copy, Clone)]
+pub(crate) struct RuntimeState {
+    value: u64,
+    buffer: [u8; BATCH_SIZE], // Use a byte buffer for TCP streams
+}
+
+impl RuntimeState {
+    pub(crate) fn new(value: i32) -> Self {
+        RuntimeState {
+            value: value as u64,
+            buffer: [0; BATCH_SIZE], // Initialize the byte buffer
+        }
+    }
+}
+
 pub async fn run(context: SteadyContext
     ,tcp_msg_rx: SteadyRx<TcpStream>
     ,tcp_conn_tx: SteadyTx<TcpStream>
+    ,state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
     // let dif = fileDifs::FileData::get_instance();
     // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");

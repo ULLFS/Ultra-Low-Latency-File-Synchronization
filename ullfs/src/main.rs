@@ -30,14 +30,12 @@ fn main() {
 
     if !systemd_command {
         info!("Starting up");
-        let mut graph = build_graph(GraphBuilder::default().build(opt.clone()) );
-        // graph.loglevel(&opt.loglevel);
+        let mut graph = build_graph(GraphBuilder::for_production()
+                                .with_telemtry_production_rate_ms(200)
+                                .build(opt.clone()) );
+
         graph.start();
 
-        /* {  //remove this block to run forever.
-           std::thread::sleep(Duration::from_secs(60));
-           graph.request_stop(); //actors can also call stop as desired on the context or monitor
-        } */
 
         graph.block_until_stopped(Duration::from_secs(2));
     }
@@ -60,26 +58,25 @@ fn build_graph(mut graph: Graph) -> Graph {
     let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder
         .with_capacity(1024)
         .build();
-    
-    // let (tcpworkeractor_tcp_msg_tx, tcplisteneractor_tcp_msg_rx) = base_channel_builder
-    //     .with_capacity(1024)
-    //     .build();
+
     
     //build actors
     
     {
-    //  let state = new_state();
+    let state = new_state();
     
      base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
                                             , ebpf_listener_conn_rx.clone()
-                                            , ebpf_listener_conn_tx.clone())
+                                            , ebpf_listener_conn_tx.clone()
+                                            , state.clone())
                   , &mut Threading::Spawn );
     }
-    {
+    
     
     graph
 }
+
 #[cfg(test)]
 mod graph_tests {
     use async_std::test;
@@ -120,4 +117,3 @@ mod graph_tests {
             graph.block_until_stopped(Duration::from_secs(3));
         }
     }
-}
