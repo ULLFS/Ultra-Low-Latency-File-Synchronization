@@ -11,14 +11,21 @@ ullfs-common = { path = "../ullfs-common", features = ["user"] }
 anyhow = "1"
 env_logger = "0.10"
 libc = "0.2"
-log = "0.4"
-tokio = { version = "1.25", features = ["full"] }
+log = "0.4.22"
+tokio = { version = "1.43", features = ["full"] }
 serde_json = "1.0.128"
 signal-hook = "0.3.17"
 bytes = "1.8.0"
 ignore = "0.4.23"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+steady_state = {version = "0.1.2", features = ["proactor_tokio"]}
+args = "2.2.0"
+structopt-derive = "0.4.18"
+structopt = "0.3.26"
 
+[dev-dependencies]
+async-std        = {  version = "1.13.0", features = ["attributes"] }
+futures-timer    = "3.0.3"
 [[bin]]
 name = "ullfs"
 path = "src/main.rs"
