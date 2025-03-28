@@ -37,7 +37,6 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-        ,tcp_msg_rx: SteadyRx<TcpStream>
         ,tcp_conn_tx: SteadyTx<TcpStream>, state: SteadyState<RuntimeState>
     ) -> Result<(),Box<dyn Error>> {
 
@@ -46,13 +45,12 @@ pub async fn run(context: SteadyContext
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
   let listener = TcpListener::bind("127.0.0.1:34254").await?;
-  let cmd =  into_monitor!(context, [tcp_msg_rx],[tcp_conn_tx]);
-  internal_behavior(cmd, tcp_msg_rx, tcp_conn_tx, listener, state).await
+  let cmd =  into_monitor!(context, [],[tcp_conn_tx]);
+  internal_behavior(cmd,tcp_conn_tx, listener, state).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
-    tcp_msg_rx: SteadyRx<TcpStream>,
     tcp_conn_tx: SteadyTx<TcpStream>,
     listener: TcpListener,
     state: SteadyState<RuntimeState>,
@@ -60,14 +58,11 @@ async fn internal_behavior<C: SteadyCommander>(
     let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
 
     if let Some(mut _state) = state_guard.as_mut() {
-        let mut tcp_msg_rx = tcp_msg_rx.lock().await;
         let mut tcp_conn_tx = tcp_conn_tx.lock().await;
 
         println!("(tcp_listener) Listening on port 34254...");
 
-        while cmd.is_running(&mut || 
-            tcp_msg_rx.is_closed_and_empty() && tcp_conn_tx.mark_closed()
-        ) {
+        while cmd.is_running(&mut || tcp_conn_tx.mark_closed()) {
             let (stream, _) = match listener.accept().await{
                 Ok(x) => x,
                 Err(e) => {

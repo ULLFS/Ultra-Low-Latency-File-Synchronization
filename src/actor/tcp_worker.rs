@@ -25,21 +25,20 @@ pub(crate) struct TcpworkeractorInternalState {
 
 pub async fn run(context: SteadyContext
         ,tcp_conn_rx: SteadyRx<TcpStream>
-        ,tcp_msg_tx: SteadyTx<TcpStream>, state: SteadyState<TcpworkeractorInternalState>
+        , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
   let _cli_args = context.args::<Args>();
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-  let cmd =  into_monitor!(context, [tcp_conn_rx],[tcp_msg_tx]);
-  internal_behavior(cmd,tcp_conn_rx, tcp_msg_tx, state).await
+  let cmd =  into_monitor!(context, [tcp_conn_rx],[]);
+  internal_behavior(cmd,tcp_conn_rx,state).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     tcp_conn_rx: SteadyRx<TcpStream>,
-    _tcp_msg_tx: SteadyTx<TcpStream>,
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 

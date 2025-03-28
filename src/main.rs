@@ -58,10 +58,6 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_capacity(1024)
         .build();
 
-    let (tcpworkeractor_tcp_msg_tx, tcplisteneractor_tcp_msg_rx) = base_channel_builder
-        .with_capacity(1024)
-        .build();
-    
     //build actors
     
     {
@@ -69,7 +65,6 @@ fn build_graph(mut graph: Graph) -> Graph {
     
      base_actor_builder.with_name("Tcp Listener")
                  .build( move |context| actor::tcp_listener::run(context
-                                            , tcplisteneractor_tcp_msg_rx.clone()
                                             , tcplisteneractor_tcp_conn_tx.clone()
                                             , state.clone() )
                   , &mut Threading::Spawn );
@@ -81,7 +76,6 @@ fn build_graph(mut graph: Graph) -> Graph {
      base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
                                             , tcpworkeractor_tcp_conn_rx.clone()
-                                            , tcpworkeractor_tcp_msg_tx.clone()
                                             , state.clone() )
                   , &mut Threading::Spawn );
     }
