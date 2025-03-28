@@ -3,13 +3,14 @@ use structopt::StructOpt;
 #[allow(unused_imports)]
 use log::*;
 use crate::args::Args;
-use std::time::Duration;
+use std::{thread::Thread, time::Duration};
 use steady_state::*;
 
 mod actor {
     
         pub mod tcp_listener;
         pub mod tcp_worker;
+        pub mod config_checker;
         pub mod handle_client;
 }
 
@@ -41,21 +42,31 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     //this common root of the channel builder allows for common config of all channels
     let base_channel_builder = graph.channel_builder()
-    .with_filled_trigger(Trigger::AvgBelow(Filled::p90()), AlertColor::Red)
-    .with_type()
-    .with_line_expansion(1.0f32);
+        .with_filled_trigger(Trigger::AvgBelow(Filled::p90()), AlertColor::Red)
+        .with_type()
+        .with_line_expansion(1.0f32);
 
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
-        /* .with_mcpu_percentile(Percentile::p80())
-        .with_load_percentile(Percentile::p80()); */
-        .with_thread_info();
+        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
+        .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
+        .with_thread_info()
+        .with_mcpu_avg()
+        .with_load_avg();
 
 
     //build channels
     
     let (tcplisteneractor_tcp_conn_tx, tcpworkeractor_tcp_conn_rx) = base_channel_builder
         .with_capacity(1024)
+        .build();
+
+    let (tcpworkeractor_str_conn_tx, configchecker_str_conn_rx) = base_channel_builder
+        .with_capacity(10)
+        .build();
+
+        let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
+        .with_capacity(10)
         .build();
 
     //build actors
@@ -75,9 +86,22 @@ fn build_graph(mut graph: Graph) -> Graph {
     
      base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
+                                            , tcpworkeractor_str_conn_tx.clone()
                                             , tcpworkeractor_tcp_conn_rx.clone()
+                                            ,tcpworker_str_conn_rx.clone()
                                             , state.clone() )
                   , &mut Threading::Spawn );
+    }
+
+    {
+        let state = new_state();
+
+        base_actor_builder.with_name("Config Checker")
+                    .build(move |context| actor::config_checker::run(context
+                                               ,configchecker_str_conn_tx.clone()
+                                               , configchecker_str_conn_rx.clone()
+                                               ,state.clone())
+                    , &mut Threading::Spawn );
     }
 
     graph
