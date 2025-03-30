@@ -42,16 +42,18 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     //this common root of the channel builder allows for common config of all channels
     let base_channel_builder = graph.channel_builder()
-        .with_filled_trigger(Trigger::AvgBelow(Filled::p90()), AlertColor::Red)
-        .with_type()
-        .with_line_expansion(1.0f32);
+        .with_filled_trigger(Trigger::AvgAbove(Filled::p90()), AlertColor::Red)
+        .with_filled_trigger(Trigger::AvgAbove(Filled::percentage(75.00f32).expect("internal range error")), AlertColor::Orange)
+        .with_filled_trigger(Trigger::AvgAbove(Filled::p50()), AlertColor::Yellow)
+        .with_line_expansion(0.0001f32)
+        .with_type();
 
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
         .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
         .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
         .with_thread_info()
-        .with_mcpu_avg()
+        .with_mcpu_avg() //0.041 % does this value need to be mutiplied by 100 so would this be equivalent to 4.1% or is this 41-thousandths
         .with_load_avg();
 
 
@@ -61,9 +63,9 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_capacity(1024)
         .build();
 
-    let (tcpworkeractor_str_conn_tx, configchecker_str_conn_rx) = base_channel_builder
+    /* let (tcpworkeractor_str_conn_tx, configchecker_str_conn_rx) = base_channel_builder
         .with_capacity(10)
-        .build();
+        .build(); */
 
         let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
         .with_capacity(10)
@@ -86,7 +88,6 @@ fn build_graph(mut graph: Graph) -> Graph {
     
      base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
-                                            , tcpworkeractor_str_conn_tx.clone()
                                             , tcpworkeractor_tcp_conn_rx.clone()
                                             ,tcpworker_str_conn_rx.clone()
                                             , state.clone() )
@@ -99,7 +100,6 @@ fn build_graph(mut graph: Graph) -> Graph {
         base_actor_builder.with_name("Config Checker")
                     .build(move |context| actor::config_checker::run(context
                                                ,configchecker_str_conn_tx.clone()
-                                               , configchecker_str_conn_rx.clone()
                                                ,state.clone())
                     , &mut Threading::Spawn );
     }

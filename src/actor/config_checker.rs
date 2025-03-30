@@ -25,7 +25,6 @@ pub(crate) struct TcpworkeractorInternalState {
 
 pub async fn run(context: SteadyContext
         ,config_conn_tx: SteadyTx<TcpStream>
-        ,config_conn_rx: SteadyRx<TcpStream>
         , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
@@ -33,24 +32,25 @@ pub async fn run(context: SteadyContext
   let _cli_args = context.args::<Args>();
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-  let cmd =  into_monitor!(context, [config_conn_rx],[config_conn_tx]);
-  internal_behavior(cmd,config_conn_tx,config_conn_rx,state).await
+  let cmd =  into_monitor!(context, [],[config_conn_tx]);
+  internal_behavior(cmd,config_conn_tx,state).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
-    _config_conn_tx: SteadyTx<TcpStream>,
-    config_conn_rx: SteadyRx<TcpStream>,
+    config_conn_tx: SteadyTx<TcpStream>,
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut buf = [0;BUFFER_SIZE];
 
-    let mut config_conn_rx = config_conn_rx.lock().await;
+    //let mut config_conn_rx = config_conn_rx.lock().await;
+    let mut config_conn_tx = config_conn_tx.lock().await;
+    println!("(config_checker) Hello World!");
 
-    while cmd.is_running(&mut || config_conn_rx.is_closed_and_empty()) {
-        let clean = await_for_all!(cmd.wait_avail(&mut config_conn_rx, 1)    );
-        
+    while cmd.is_running(&mut || config_conn_tx.mark_closed()) {
+        let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
+        cmd.relay_stats();
     }
     Ok(())
 }

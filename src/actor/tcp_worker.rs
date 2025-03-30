@@ -24,7 +24,6 @@ pub(crate) struct TcpworkeractorInternalState {
 
 
 pub async fn run(context: SteadyContext
-        ,tcp_conn_tx: SteadyTx<TcpStream>
         ,tcp_conn_rx: SteadyRx<TcpStream>
         ,tcp_conn_config_rx: SteadyRx<TcpStream>
         , state: SteadyState<TcpworkeractorInternalState>
@@ -34,13 +33,12 @@ pub async fn run(context: SteadyContext
   let _cli_args = context.args::<Args>();
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-  let cmd =  into_monitor!(context, [&tcp_conn_rx, &tcp_conn_config_rx],[tcp_conn_tx]);
-  internal_behavior(cmd, tcp_conn_tx, tcp_conn_rx, tcp_conn_config_rx, state).await
+  let cmd =  into_monitor!(context, [&tcp_conn_rx, &tcp_conn_config_rx],[]);
+  internal_behavior(cmd,tcp_conn_rx, tcp_conn_config_rx, state).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
-    _tcp_conn_tx: SteadyTx<TcpStream>,
     tcp_conn_rx: SteadyRx<TcpStream>,
     _tcp_conn_config_rx: SteadyRx<TcpStream>,
     _state: SteadyState<TcpworkeractorInternalState>,
@@ -49,9 +47,14 @@ async fn internal_behavior<C: SteadyCommander>(
     let mut buf = [0;BUFFER_SIZE];
 
     let mut tcp_conn_rx = tcp_conn_rx.lock().await;
+    let mut _tcp_conn_config_rx = _tcp_conn_config_rx.lock().await;
 
-    while cmd.is_running(&mut || tcp_conn_rx.is_closed_and_empty()) {
-        let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
+    while cmd.is_running(&mut || tcp_conn_rx.is_closed_and_empty() && _tcp_conn_config_rx.is_closed_and_empty()) {
+        //let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
+
+        // I need to ask Nathan a question about what the count should be. 
+        let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1),
+                                               cmd.wait_avail(&mut _tcp_conn_config_rx,1)); // count: The number of units to wait for
         
         match cmd.try_take(&mut tcp_conn_rx) {
             Some(stream) => {
