@@ -45,8 +45,15 @@ pub async fn run(context: SteadyContext
     let cmd =  into_monitor!(context, [],[transmitter]);
     internal_behavior(cmd, transmitter, state).await
 }
-fn ebpf_builder() -> Result<Ebpf, Box<dyn Error>> {
-    // println!("Running ebpf_builder"); // Why is ebpf_builder running twice?
+
+async fn internal_behavior(mut cmd: LocalMonitor<0,1>, 
+    transmitter: &'static SteadyTx<String>, 
+    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
+    let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
+
+    if let Some(mut _state) = state_guard.as_mut() {
+        // let mut tcp_msg_rx = tcp_msg_rx.lock().await;
+        // println!("Running ebpf_builder"); // Why is ebpf_builder running twice?
 
     // let dif = fileDifs::FileData::get_instance();
     // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
@@ -157,20 +164,12 @@ fn ebpf_builder() -> Result<Ebpf, Box<dyn Error>> {
         let progid_64 : u64 = u64::from(progid);
         progdata.set(0, progid_64, 0)?
     }
-    Ok(bpf)
-}
-async fn internal_behavior(mut cmd: LocalMonitor<0,1>, 
-    transmitter: &'static SteadyTx<String>, 
-    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
-    let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
-
-    if let Some(mut _state) = state_guard.as_mut() {
-        // let mut tcp_msg_rx = tcp_msg_rx.lock().await;
+    
         
     // let mut bpf = ebpf_builder();
     // l
         // tokio::time::sleep
-        let mut bpf = ebpf_builder().expect("Failed to set up ebpf code");
+        // let mut bpf = ebpf_builder().expect("Failed to set up ebpf code");
         let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap()).expect("Failed to set up perf event array");
         let buf_array: PerCpuArray<_,[u8;64]> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
             Ok(x) => x,
@@ -186,8 +185,11 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
             let mut buf = perf_array.open(cpu_id, None).expect("Failed to open perf array");
             let s_buf_clone = Arc::clone(&s_buf);
             let cmd_mutex_clone = Arc::clone(&cmd_mutex);
-            let mut ebpf_tx = transmitter.lock().await;
+            // println!("About to lock:");
+            // let mut ebpf_tx = transmitter.lock().await;
             tokio::task::spawn(async move {
+                println!("Spawned a task");
+                
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
 
                 let mut buffers = (0..4)
@@ -195,7 +197,8 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                     .collect::<Vec<_>>();
                 
                 loop {
-                    
+
+                    println!("WEE");
                     // wait for events
                     let event = buf.read_events(&mut buffers).await.unwrap(); /*{
                         Some(x) => x,
@@ -203,6 +206,8 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                             panic!("Buffer read events bad somehow");
                         }
                     };*/
+                    
+                    println!("Received event");
                     
                     for i in 0..event.read {
                         let buf = &mut buffers[i];
@@ -276,13 +281,16 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                                 if !should_filter {
                                     // send_full_contents_of_file_tcp(final_path.as_str());
                                     // client_tcp::write_full_file_to_connections(final_path.as_str());
-                                    match cmd_mutex_clone.lock().await.send_async(&mut ebpf_tx, final_path, SendSaturation::IgnoreAndWait).await{
-                                        Ok(x) => x,
-                                        Err(e) => {
-                                            println!("Got an error from send_async: {}", e);
-                                            // Not panicing because maybe its a nonissue?
-                                        }
-                                    };
+                                    
+
+                                    // match cmd_mutex_clone.lock().await.send_async(&mut ebpf_tx, final_path, SendSaturation::IgnoreAndWait).await{
+                                    //     Ok(x) => x,
+                                    //     Err(e) => {
+                                    //         println!("Got an error from send_async: {}", e);
+                                    //         // Not panicing because maybe its a nonissue?
+                                    //     }
+                                    // };
+                                    println!("Out of lock");
                                 }
                             },
                             1 => println!("vfs_mkdir"),
@@ -292,11 +300,13 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                         }
                     }
                 }
+                println!("Ended loop");
                 // return;
             });
             
         }
     }
-
+    println!("Finished!");
+    // loop{}
     Ok(())
 }
