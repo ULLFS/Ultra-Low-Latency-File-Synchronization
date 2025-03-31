@@ -3,11 +3,13 @@
 use log::*;
 //use crate::actor::tcp_listener::TcpMessage;
 #[allow(unused_imports)]
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use steady_state::*;
 use crate::{actor::handle_client, Args};
 use std::error::Error;
 use tokio::net::TcpStream;
+use std::thread;
+use crate::actor::tcp_worker::ConfigMsg;
 //use std::io;
 
 const BUFFER_SIZE: usize = 4096;
@@ -24,7 +26,7 @@ pub(crate) struct TcpworkeractorInternalState {
 
 
 pub async fn run(context: SteadyContext
-        ,config_conn_tx: SteadyTx<TcpStream>
+        ,config_conn_tx: SteadyTx<ConfigMsg>
         , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
@@ -38,7 +40,7 @@ pub async fn run(context: SteadyContext
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
-    config_conn_tx: SteadyTx<TcpStream>,
+    config_conn_tx: SteadyTx<ConfigMsg>,
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
@@ -50,7 +52,12 @@ async fn internal_behavior<C: SteadyCommander>(
 
     while cmd.is_running(&mut || config_conn_tx.mark_closed()) {
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
+
+        println!("Hello, this message prints every 15 seconds!");
+        thread::sleep(Duration::from_secs(15));
+
         cmd.relay_stats();
+
     }
     Ok(())
 }

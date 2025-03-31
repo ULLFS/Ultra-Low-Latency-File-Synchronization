@@ -22,10 +22,15 @@ pub(crate) struct TcpResponse {
 pub(crate) struct TcpworkeractorInternalState {
 }
 
+#[derive(Default, Clone, Debug, Eq, PartialEq)]
+pub(crate) struct  ConfigMsg{
+    pub msg: Box<str>
+}
+
 
 pub async fn run(context: SteadyContext
         ,tcp_conn_rx: SteadyRx<TcpStream>
-        ,tcp_conn_config_rx: SteadyRx<TcpStream>
+        ,tcp_conn_config_rx: SteadyRx<ConfigMsg>
         , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
@@ -40,7 +45,7 @@ pub async fn run(context: SteadyContext
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     tcp_conn_rx: SteadyRx<TcpStream>,
-    _tcp_conn_config_rx: SteadyRx<TcpStream>,
+    _tcp_conn_config_rx: SteadyRx<ConfigMsg>,
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
