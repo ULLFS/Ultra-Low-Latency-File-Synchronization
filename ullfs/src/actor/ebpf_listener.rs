@@ -1,26 +1,23 @@
-use aya::maps::{array, PerCpuArray, PerfEventArray};
-use aya::programs::KProbe;
-use aya::util::online_cpus;
-use aya::Ebpf;
-use aya::{
-    include_bytes_aligned,
-    maps::Array,
-};
-//use client::send_full_contents_of_file_tcp;
-use env_logger::filter;
-use steady_state::{SteadyContext, SteadyRx, SteadyState, SteadyTx};
-use tokio::net::TcpStream;
-use std::error::Error;
-use std::sync::Arc;
-use log::debug;
-use std::{fs, future};
-use std::process;
-use std::io::BufReader;
-use serde_json::{self, Value};
-use aya::maps::AsyncPerfEventArray;
+
+use aya::{include_bytes_aligned, maps::{Array, AsyncPerfEventArray, PerCpuArray}, programs::KProbe, util::online_cpus, Ebpf};
 use bytes::{Buf, BytesMut};
-use crate::{client_tcp, fileFilter};
-use tokio::task; // or async_std::task
+#[allow(unused_imports)]
+use log::*;
+use serde_json::Value;
+/* use tokio::runtime::Runtime;
+use std::default; */
+#[allow(unused_imports)]
+use std::time::Duration;
+use steady_state::*;
+// use crate::Args;
+use std::{error::Error, fs, io::BufReader, process, sync::{Arc}};
+//use crate::actor::tcp_worker::TcpResponse;
+use tokio::{net::{TcpListener, TcpStream}, sync::Mutex};
+
+use crate::fileFilter;
+//use tokio::io::{AsyncReadExt, AsyncWriteExt};
+//use std::io::{Read,Write};
+//use std::sync::Arc;
 // use tokio::time::Sleep;
 
 const BATCH_SIZE: usize = 7000;
@@ -41,10 +38,16 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-    ,tcp_msg_rx: SteadyRx<TcpStream>
-    ,tcp_conn_tx: SteadyTx<TcpStream>
+    ,transmitter: &'static SteadyTx<String>
     ,state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
+    
+    let cmd =  into_monitor!(context, [],[transmitter]);
+    internal_behavior(cmd, transmitter, state).await
+}
+fn ebpf_builder() -> Result<Ebpf, Box<dyn Error>> {
+    // println!("Running ebpf_builder"); // Why is ebpf_builder running twice?
+
     // let dif = fileDifs::FileData::get_instance();
     // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
     // let t = tokio::signal::ctrl_c().await;
@@ -52,7 +55,7 @@ pub async fn run(context: SteadyContext
     // println!("Old size: {}. New size: {}", old.1.len(), new.1.len());
     // println!("New start: {}. New end: {}", new.0, new.2);
     // return Ok(());
-    env_logger::init();
+    // env_logger::init();
     
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/
@@ -154,11 +157,21 @@ pub async fn run(context: SteadyContext
         let progid_64 : u64 = u64::from(progid);
         progdata.set(0, progid_64, 0)?
     }
-    
-    {
-        // l
+    Ok(bpf)
+}
+async fn internal_behavior(mut cmd: LocalMonitor<0,1>, 
+    transmitter: &'static SteadyTx<String>, 
+    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
+    let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
+
+    if let Some(mut _state) = state_guard.as_mut() {
+        // let mut tcp_msg_rx = tcp_msg_rx.lock().await;
+        
+    // let mut bpf = ebpf_builder();
+    // l
         // tokio::time::sleep
-        let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
+        let mut bpf = ebpf_builder().expect("Failed to set up ebpf code");
+        let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap()).expect("Failed to set up perf event array");
         let buf_array: PerCpuArray<_,[u8;64]> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
             Ok(x) => x,
             Err(_) => {
@@ -167,13 +180,14 @@ pub async fn run(context: SteadyContext
         };
         let s_buf = Arc::new(buf_array);
         // let watch_dir_clone = Arc::new(watch_dir);
-        for cpu_id in online_cpus().map_err(|(_, error)| error)? {
+        let cmd_mutex = Arc::new(Mutex::new(cmd));
+        for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus") {
             // open a separate perf buffer for each cpu
-            let mut buf = perf_array.open(cpu_id, None)?;
-
+            let mut buf = perf_array.open(cpu_id, None).expect("Failed to open perf array");
             let s_buf_clone = Arc::clone(&s_buf);
-            
-            task::spawn(async move {
+            let cmd_mutex_clone = Arc::clone(&cmd_mutex);
+            let mut ebpf_tx = transmitter.lock().await;
+            tokio::task::spawn(async move {
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
 
                 let mut buffers = (0..4)
@@ -201,6 +215,7 @@ pub async fn run(context: SteadyContext
 
                         match data {
                             0 => {
+                                
                                 // VFS_Write
                                 let total_len: u16 = (len2 as u16 * 255u16) + len as u16;
                                 // println!("Event received {}: {}, {}", totalLen, len, len2);
@@ -256,12 +271,18 @@ pub async fn run(context: SteadyContext
                                 // Create the final path from the path we got and the watch directory
                                 let final_path = String::from(filter.get_base_dir()) + corrected_path.as_str();
                                 let should_filter = filter.should_filter(final_path.as_str());
-        
+                                // ebpf_listener_conn_tx.send("Test").await.unwrap();
                                 // Extract deltas
                                 if !should_filter {
                                     // send_full_contents_of_file_tcp(final_path.as_str());
-                                    client_tcp::write_full_file_to_connections(final_path.as_str());
-                                    
+                                    // client_tcp::write_full_file_to_connections(final_path.as_str());
+                                    match cmd_mutex_clone.lock().await.send_async(&mut ebpf_tx, final_path, SendSaturation::IgnoreAndWait).await{
+                                        Ok(x) => x,
+                                        Err(e) => {
+                                            println!("Got an error from send_async: {}", e);
+                                            // Not panicing because maybe its a nonissue?
+                                        }
+                                    };
                                 }
                             },
                             1 => println!("vfs_mkdir"),
@@ -269,21 +290,13 @@ pub async fn run(context: SteadyContext
                             3 => println!("vfs_rename"),
                             _ => panic!("Error: Undetermined Call"), // `_` is a catch-all pattern for any other case
                         }
-
-                        // We have the 2 u8's that consist of a u16
-                        // Even though get_u16() existed, it gave me really large numbers
-                        // So I instead combined two u8's
-                        // We know the max size is 4096 so we can use values higher than that as error codes
-                        // Or 0
-                        
                     }
                 }
-                // Ok::<_, PerfBufferError>(())
+                // return;
             });
+            
         }
     }
-    //{Index, Value, Flags}
-    let t = tokio::signal::ctrl_c().await;
-    println!("Exiting");
+
     Ok(())
 }

@@ -1,9 +1,13 @@
 mod args;
+use anyhow::Error;
+use aya::{include_bytes_aligned, maps::{Array, AsyncPerfEventArray, PerCpuArray}, programs::KProbe, util::online_cpus, Ebpf};
+use bytes::{Buf, BytesMut};
+use serde_json::Value;
 use structopt::StructOpt;
 #[allow(unused_imports)]
 use log::*;
 use crate::args::Args;
-use std::time::Duration;
+use std::{fs, io::BufReader, process, sync::Arc, time::Duration};
 use steady_state::*;
 mod client;
 pub mod filehasher;
@@ -54,21 +58,19 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_load_percentile(Percentile::p80());
 
     //build channels
-    
-    let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder
-        .with_capacity(1024)
-        .build();
-
+    //{Index, Value, Flags}
+    // let t = tokio::signal::ctrl_c().await;
+    // println!("Exiting");
     
     //build actors
     
     {
-    let state = new_state();
-    
+        
+        let state = new_state();
+        let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
      base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
-                                            , ebpf_listener_conn_rx.clone()
-                                            , ebpf_listener_conn_tx.clone()
+                                            , Box::leak(Box::new(ebpf_listener_conn_tx.clone()))
                                             , state.clone())
                   , &mut Threading::Spawn );
     }

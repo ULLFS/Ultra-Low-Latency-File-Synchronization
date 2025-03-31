@@ -2785,6 +2785,7 @@ dependencies = [
  "bytes",
  "env_logger",
  "futures-timer",
+ "futures-util",
  "ignore",
  "libc",
  "log",
