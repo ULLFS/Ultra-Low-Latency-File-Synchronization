@@ -3,21 +3,16 @@
 use log::*;
 //use crate::actor::tcp_listener::TcpMessage;
 #[allow(unused_imports)]
-use std::time::{Duration, SystemTime};
+//use std::time::{Duration, SystemTime};
 use steady_state::*;
 use crate::{actor::handle_client, Args};
 use std::error::Error;
-use tokio::net::TcpStream;
+use tokio::time::{sleep, Duration};
 use std::thread;
 use crate::actor::tcp_worker::ConfigMsg;
 //use std::io;
 
 const BUFFER_SIZE: usize = 4096;
-
-#[derive(Default,Clone,Debug,Eq,PartialEq)]
-pub(crate) struct TcpResponse {
-   pub data : Vec<u8>
-}
 
 //if no internal state is required (recommended) feel free to remove this.
 #[derive(Default)]
@@ -38,6 +33,7 @@ pub async fn run(context: SteadyContext
   internal_behavior(cmd,config_conn_tx,state).await
 }
 
+
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     config_conn_tx: SteadyTx<ConfigMsg>,
@@ -48,13 +44,13 @@ async fn internal_behavior<C: SteadyCommander>(
 
     //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut config_conn_tx = config_conn_tx.lock().await;
-    println!("(config_checker) Hello World!");
 
     while cmd.is_running(&mut || config_conn_tx.mark_closed()) {
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
-        println!("Hello, this message prints every 15 seconds!");
-        thread::sleep(Duration::from_secs(15));
+        //println!("Hello, this message prints every 5 minutes!");
+        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("Hello, this message prints every 5 minutes!")},SendSaturation::IgnoreAndWait,).await;
+        sleep(Duration::from_secs(400)).await;
 
         cmd.relay_stats();
 

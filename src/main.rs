@@ -50,6 +50,7 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
+        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m256()), AlertColor::Yellow)
         .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
         .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
         .with_thread_info()
@@ -62,10 +63,6 @@ fn build_graph(mut graph: Graph) -> Graph {
     let (tcplisteneractor_tcp_conn_tx, tcpworkeractor_tcp_conn_rx) = base_channel_builder
         .with_capacity(1024)
         .build();
-
-    /* let (tcpworkeractor_str_conn_tx, configchecker_str_conn_rx) = base_channel_builder
-        .with_capacity(10)
-        .build(); */
 
         let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
         .with_capacity(10)

@@ -24,7 +24,7 @@ pub(crate) struct TcpworkeractorInternalState {
 
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct  ConfigMsg{
-    pub msg: Box<str>
+        pub(crate) text: String
 }
 
 
@@ -60,6 +60,16 @@ async fn internal_behavior<C: SteadyCommander>(
         // I need to ask Nathan a question about what the count should be. 
         let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1),
                                                cmd.wait_avail(&mut _tcp_conn_config_rx,1)); // count: The number of units to wait for
+
+        match cmd.try_take(&mut _tcp_conn_config_rx){
+            Some(msg) => {
+                println!("(tcp_worker) {:?}", msg);
+                cmd.relay_stats();
+            }
+            None => {
+                continue;
+            }
+        }
         
         match cmd.try_take(&mut tcp_conn_rx) {
             Some(stream) => {
@@ -88,7 +98,6 @@ async fn internal_behavior<C: SteadyCommander>(
                         }
                     } */
                 }
-                cmd.relay_stats();
             }
             None => {
                 if clean {
