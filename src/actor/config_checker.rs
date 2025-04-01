@@ -49,8 +49,8 @@ async fn internal_behavior<C: SteadyCommander>(
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
         //println!("Hello, this message prints every 5 minutes!");
-        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("Hello, this message prints every 5 minutes!")},SendSaturation::IgnoreAndWait,).await;
-        sleep(Duration::from_secs(400)).await;
+        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("Hello, this message prints every 15 seconds!")},SendSaturation::IgnoreAndWait,).await;
+        sleep(Duration::from_secs(15)).await;
 
         cmd.relay_stats();
 

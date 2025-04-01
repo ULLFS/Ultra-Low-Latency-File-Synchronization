@@ -12,6 +12,7 @@ mod actor {
         pub mod tcp_worker;
         pub mod config_checker;
         pub mod handle_client;
+        pub mod file_filter;
 }
 
 fn main() {
