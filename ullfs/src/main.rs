@@ -67,8 +67,8 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         
         let state = new_state();
-        let ebpf_tx = Vec::new();
-        let ebpf_rx = Vec::new();
+        let ebpf_tx: Vec<SteadyTx<String>> = Vec::new();
+        let ebpf_rx: Vec<SteadyRx<String>> = Vec::new();
         for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
             let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
             ebpf_tx.push(Box::leak(Box::new(ebpf_listener_conn_tx)));
