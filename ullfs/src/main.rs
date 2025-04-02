@@ -19,6 +19,7 @@ pub mod client_tcp;
 mod actor {
     
         pub mod ebpf_listener;
+        pub mod ram_cleaner;
         // pub mod tcp_worker;
         // pub mod handle_client;
 }
@@ -81,6 +82,10 @@ fn build_graph(mut graph: Graph) -> Graph {
                                             , state.clone())
                   , &mut Threading::Spawn );
         // }  
+        // base_actor_builder.with_name("RamCleanerActor")
+        //             .build(move | context | actor::ram_cleaner::run(context,
+        //                                      state.clone())
+        //             ,&mut Threading::Spawn);
      
     }
     

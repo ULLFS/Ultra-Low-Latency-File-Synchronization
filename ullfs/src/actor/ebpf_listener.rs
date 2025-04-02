@@ -235,8 +235,10 @@ async fn internal_behavior(context: SteadyContext,
                 }
             };
             println!("Data Recieved: {}", received_string);
-
+            let mut transmit_lock = transmitter.lock().await;
+            cmd.send_async(&mut transmit_lock, Box::new(received_string), SendSaturation::IgnoreAndWait).await;
             received_data = rx.recv().await;
+
         }
     }
     println!("Finished!");
