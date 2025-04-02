@@ -67,10 +67,16 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         
         let state = new_state();
-        let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
+        let ebpf_tx = Vec::new();
+        let ebpf_rx = Vec::new();
+        for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
+            let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
+            ebpf_tx.push(Box::leak(Box::new(ebpf_listener_conn_tx)));
+            ebpf_rx.push(ebpf_listener_conn_rx);
+        }  
      base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
-                                            , Box::leak(Box::new(ebpf_listener_conn_tx.clone()))
+                                            , ebpf_tx
                                             , state.clone())
                   , &mut Threading::Spawn );
     }

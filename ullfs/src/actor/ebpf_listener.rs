@@ -38,16 +38,22 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-    ,transmitter: &'static SteadyTx<String>
+    ,transmitter_list: Vec<&'static SteadyTx<String>>
     ,state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
-    
-    let cmd =  into_monitor!(context, [],[transmitter]);
-    internal_behavior(cmd, transmitter, state).await
+    // let mut cmd_list = Vec::new();
+    // for transmitter in &transmitter_list {
+    //     let cmd =  into_monitor!(context.clone(), [],[transmitter]);
+    //     // internal_behavior(cmd, transmitter, state).await
+    //     cmd_list.push(cmd);
+
+    // }
+    internal_behavior(context, transmitter_list, state).await
+
 }
 
-async fn internal_behavior(mut cmd: LocalMonitor<0,1>, 
-    transmitter: &'static SteadyTx<String>, 
+async fn internal_behavior(context: SteadyContext, 
+    transmitter_list: Vec<&'static SteadyTx<String>>,
     state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
     let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
 
@@ -179,15 +185,21 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
         };
         let s_buf = Arc::new(buf_array);
         // let watch_dir_clone = Arc::new(watch_dir);
-        let cmd_mutex = Arc::new(Mutex::new(cmd));
+        // let cmd_mutex = Arc::new(Mutex::new(cmd));
+        let mut i = 0;
         for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus") {
             // open a separate perf buffer for each cpu
+            let transmitter = transmitter_list.get(i).expect("Failed to get");
+            let mut cmd =  into_monitor!(context.clone(), [],[transmitter]);
+            let mut transmitter = transmitter.lock().await;
+            i += 1;
             let mut buf = perf_array.open(cpu_id, None).expect("Failed to open perf array");
             let s_buf_clone = Arc::clone(&s_buf);
-            let cmd_mutex_clone = Arc::clone(&cmd_mutex);
+            // let cmd_mutex_clone = Arc::clone(&cmd_mutex);
             // println!("About to lock:");
             // let mut ebpf_tx = transmitter.lock().await;
             tokio::task::spawn(async move {
+                
                 println!("Spawned a task");
                 
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
@@ -282,9 +294,10 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                                     // send_full_contents_of_file_tcp(final_path.as_str());
                                     // client_tcp::write_full_file_to_connections(final_path.as_str());
                                     
-
+                                    cmd.send_async(&mut transmitter, "test".to_string(), SendSaturation::IgnoreAndWait);
                                     // match cmd_mutex_clone.lock().await.send_async(&mut ebpf_tx, final_path, SendSaturation::IgnoreAndWait).await{
                                     //     Ok(x) => x,
+
                                     //     Err(e) => {
                                     //         println!("Got an error from send_async: {}", e);
                                     //         // Not panicing because maybe its a nonissue?
@@ -300,7 +313,7 @@ async fn internal_behavior(mut cmd: LocalMonitor<0,1>,
                         }
                     }
                 }
-                println!("Ended loop");
+                // println!("Ended loop");
                 // return;
             });
             
