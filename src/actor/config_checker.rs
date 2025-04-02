@@ -10,6 +10,7 @@ use std::error::Error;
 use tokio::time::{sleep, Duration};
 use std::thread;
 use crate::actor::tcp_worker::ConfigMsg;
+use crate::actor::file_filter::Filter; // Import the Filter struct for connection details
 //use std::io;
 
 const BUFFER_SIZE: usize = 4096;
@@ -45,11 +46,20 @@ async fn internal_behavior<C: SteadyCommander>(
     //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut config_conn_tx = config_conn_tx.lock().await;
 
+
     while cmd.is_running(&mut || config_conn_tx.mark_closed()) {
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
-        //println!("Hello, this message prints every 5 minutes!");
-        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("Hello, this message prints every 15 seconds!")},SendSaturation::IgnoreAndWait,).await;
+        // Retrieve the Filter instance to access configuration details
+        let filter = Filter::get_instance();
+        
+        // Get configuration details from the Filter instance
+        let watch_dir: &str = filter.get_watch_dir();
+        
+
+        // send data through the channel to tcp_worker
+        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
+
         sleep(Duration::from_secs(15)).await;
 
         cmd.relay_stats();

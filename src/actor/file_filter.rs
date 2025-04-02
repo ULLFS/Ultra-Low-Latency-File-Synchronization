@@ -10,8 +10,7 @@ static INSTANCE: OnceLock<Filter> = OnceLock::new();
 // This isn't the correct rust way of doing this but I don't know the correct method
 pub struct Filter{
     ignore: Gitignore,
-    baseDir: String,
-    // client_port: String,
+    base_dir: String,
     current_id: u64
 }
 
@@ -23,25 +22,22 @@ impl Filter{
                 panic!("Error: config.json missing or destroyed.\n{}", e)
             }
         };
+
         let reader = BufReader::new(conf_file);
+
         let conf : Value = match serde_json::from_reader(reader){
             Ok(x) => x,
             Err(e) => {
                 panic!("Error: config.json structure damaged.\n{}", e);
             }
         }; 
+
         let watch_dir : String = match &conf["watch_dir"].as_str() {
             None => {
                 panic!("Error: watch_dir was not a string in config.json");
             }
             Some(x) => x.to_string(),
         };
-
-
-        // let f_client_port: String = match conf["client_port"].as_str() {
-        //     Some(x) => x.to_string(),
-        //     None => panic!("Error: client_port was not a string in config.json"),
-        // };
         
         let ignore_rules: Vec<Value> = match &conf["ignore"].as_array(){
             None => {
@@ -51,6 +47,7 @@ impl Filter{
         };
 
         let mut ignoreBuilder: GitignoreBuilder = GitignoreBuilder::new(watch_dir.clone());
+
         for val in ignore_rules{
             let valStr: String = match val.as_str(){
                 None => {
@@ -76,9 +73,7 @@ impl Filter{
 
         Filter {
             ignore: ignorer,
-            baseDir: watch_dir,
-            // dns_web_address: f_dns_web_address,
-            // client_port: f_client_port,
+            base_dir: watch_dir,
             current_id: 0
         }
         
@@ -93,20 +88,10 @@ impl Filter{
         false
     }
 
-    // Getter for baseDir
-    pub fn get_base_dir(&self) -> &str {
-        &self.baseDir.as_str()
+    // Getter for watch_dir
+    pub  fn get_watch_dir(&self) -> &str {
+        &self.base_dir.as_str()
     }
-
-    // Getter for dns_web_address
-    // pub fn get_dns_web_address(&self) -> &str {
-    //     &self.dns_web_address.as_str()
-    // }
-    
-    // // Getter for client_port
-    // pub fn get_client_port(&self) -> &str {
-    //     &self.client_port.as_str()
-    // }
 
     
     
