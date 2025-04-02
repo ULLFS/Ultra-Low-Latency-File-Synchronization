@@ -22,6 +22,7 @@ mod actor {
         // pub mod tcp_worker;
         // pub mod handle_client;
 }
+pub mod ebpf_setup;
 
 fn main() {
     let opt = Args::from_args();
@@ -67,18 +68,20 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         
         let state = new_state();
-        let ebpf_tx: Vec<SteadyTx<String>> = Vec::new();
-        let ebpf_rx: Vec<SteadyRx<String>> = Vec::new();
-        for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
-            let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
-            ebpf_tx.push(Box::leak(Box::new(ebpf_listener_conn_tx)));
-            ebpf_rx.push(ebpf_listener_conn_rx);
-        }  
-     base_actor_builder.with_name("EbpfListenerActor")
+        let ebpf_tx: Vec<SteadyTx<Box<String>>> = Vec::new();
+        let ebpf_rx: Vec<SteadyRx<Box<String>>> = Vec::new();
+        
+        // for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
+        let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
+        // ebpf_tx.push(ebpf_listener_conn_tx.clone());
+        // ebpf_rx.push(ebpf_listener_conn_rx.clone());
+        base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
-                                            , ebpf_tx
+                                            , ebpf_listener_conn_tx.clone()
                                             , state.clone())
                   , &mut Threading::Spawn );
+        // }  
+     
     }
     
     

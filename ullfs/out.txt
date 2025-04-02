@@ -1,659 +1,242 @@
-ullfs v0.1.0 (/home/zmanjaroschool/ullfs/ullfs)
-├── anyhow v1.0.97
-├── args v2.2.0
-│   ├── getopts v0.2.21
-│   │   └── unicode-width v0.1.14
-│   └── log v0.4.27
-│       └── value-bag v1.11.1
-├── aya v0.13.1
-│   ├── assert_matches v1.5.0
-│   ├── aya-obj v0.2.1
-│   │   ├── bytes v1.10.1
-│   │   ├── core-error v0.0.0
-│   │   │   [build-dependencies]
-│   │   │   └── version_check v0.9.5
-│   │   ├── hashbrown v0.15.2
-│   │   │   ├── allocator-api2 v0.2.21
-│   │   │   ├── equivalent v1.0.2
-│   │   │   └── foldhash v0.1.5
-│   │   ├── log v0.4.27 (*)
-│   │   ├── object v0.36.7
-│   │   │   ├── crc32fast v1.4.2
-│   │   │   │   └── cfg-if v1.0.0
-│   │   │   ├── hashbrown v0.15.2 (*)
-│   │   │   ├── indexmap v2.8.0
-│   │   │   │   ├── equivalent v1.0.2
-│   │   │   │   └── hashbrown v0.15.2 (*)
-│   │   │   └── memchr v2.7.4
-│   │   └── thiserror v1.0.69
-│   │       └── thiserror-impl v1.0.69 (proc-macro)
-│   │           ├── proc-macro2 v1.0.94
-│   │           │   └── unicode-ident v1.0.18
-│   │           ├── quote v1.0.40
-│   │           │   └── proc-macro2 v1.0.94 (*)
-│   │           └── syn v2.0.100
-│   │               ├── proc-macro2 v1.0.94 (*)
-│   │               ├── quote v1.0.40 (*)
-│   │               └── unicode-ident v1.0.18
-│   ├── bitflags v2.9.0
-│   ├── bytes v1.10.1
-│   ├── libc v0.2.171
-│   ├── log v0.4.27 (*)
-│   ├── object v0.36.7 (*)
-│   ├── once_cell v1.21.1
-│   ├── thiserror v1.0.69 (*)
-│   └── tokio v1.44.1
-│       ├── bytes v1.10.1
-│       ├── libc v0.2.171
-│       ├── mio v1.0.3
-│       │   └── libc v0.2.171
-│       ├── parking_lot v0.12.3
-│       │   ├── lock_api v0.4.12
-│       │   │   └── scopeguard v1.2.0
-│       │   │   [build-dependencies]
-│       │   │   └── autocfg v1.4.0
-│       │   └── parking_lot_core v0.9.10
-│       │       ├── cfg-if v1.0.0
-│       │       ├── libc v0.2.171
-│       │       └── smallvec v1.14.0
-│       ├── pin-project-lite v0.2.16
-│       ├── signal-hook-registry v1.4.2
-│       │   └── libc v0.2.171
-│       ├── socket2 v0.5.8
-│       │   └── libc v0.2.171
-│       └── tokio-macros v2.5.0 (proc-macro)
-│           ├── proc-macro2 v1.0.94 (*)
-│           ├── quote v1.0.40 (*)
-│           └── syn v2.0.100 (*)
-├── aya-log v0.2.1
-│   ├── aya v0.13.1 (*)
-│   ├── aya-log-common v0.1.15
-│   │   └── num_enum v0.7.3
-│   │       └── num_enum_derive v0.7.3 (proc-macro)
-│   │           ├── proc-macro2 v1.0.94 (*)
-│   │           ├── quote v1.0.40 (*)
-│   │           └── syn v2.0.100 (*)
-│   ├── bytes v1.10.1
-│   ├── log v0.4.27 (*)
-│   ├── thiserror v1.0.69 (*)
-│   └── tokio v1.44.1 (*)
-├── bytes v1.10.1
-├── env_logger v0.10.2
-│   ├── humantime v2.2.0
-│   ├── is-terminal v0.4.16
-│   │   └── libc v0.2.171
-│   ├── log v0.4.27 (*)
-│   ├── regex v1.11.1
-│   │   ├── aho-corasick v1.1.3
-│   │   │   └── memchr v2.7.4
-│   │   ├── memchr v2.7.4
-│   │   ├── regex-automata v0.4.9
-│   │   │   ├── aho-corasick v1.1.3 (*)
-│   │   │   ├── memchr v2.7.4
-│   │   │   └── regex-syntax v0.8.5
-│   │   └── regex-syntax v0.8.5
-│   └── termcolor v1.4.1
-├── ignore v0.4.23
-│   ├── crossbeam-deque v0.8.6
-│   │   ├── crossbeam-epoch v0.9.18
-│   │   │   └── crossbeam-utils v0.8.21
-│   │   └── crossbeam-utils v0.8.21
-│   ├── globset v0.4.16
-│   │   ├── aho-corasick v1.1.3 (*)
-│   │   ├── bstr v1.11.3
-│   │   │   └── memchr v2.7.4
-│   │   ├── log v0.4.27 (*)
-│   │   ├── regex-automata v0.4.9 (*)
-│   │   └── regex-syntax v0.8.5
-│   ├── log v0.4.27 (*)
-│   ├── memchr v2.7.4
-│   ├── regex-automata v0.4.9 (*)
-│   ├── same-file v1.0.6
-│   └── walkdir v2.5.0
-│       └── same-file v1.0.6
-├── libc v0.2.171
-├── log v0.4.27 (*)
-├── serde_json v1.0.140
-│   ├── itoa v1.0.15
-│   ├── memchr v2.7.4
-│   ├── ryu v1.0.20
-│   └── serde v1.0.219
-├── signal-hook v0.3.17
-│   ├── libc v0.2.171
-│   └── signal-hook-registry v1.4.2 (*)
-├── steady_state v0.1.2
-│   ├── aeron v0.2.0
-│   │   ├── aeron_archiver_codecs v0.1.1
-│   │   ├── cache_line_size v1.0.0
-│   │   ├── chrono v0.4.40
-│   │   │   ├── iana-time-zone v0.1.62
-│   │   │   └── num-traits v0.2.19
-│   │   │       [build-dependencies]
-│   │   │       └── autocfg v1.4.0
-│   │   ├── core_affinity v0.8.3
-│   │   │   ├── libc v0.2.171
-│   │   │   └── num_cpus v1.16.0
-│   │   │       └── libc v0.2.171
-│   │   ├── ctrlc v3.4.5
-│   │   │   └── nix v0.29.0
-│   │   │       ├── bitflags v2.9.0
-│   │   │       ├── cfg-if v1.0.0
-│   │   │       └── libc v0.2.171
-│   │   │       [build-dependencies]
-│   │   │       └── cfg_aliases v0.2.1
-│   │   ├── galvanic-assert v0.8.7
-│   │   ├── lazy_static v1.5.0
-│   │   ├── log v0.4.27 (*)
-│   │   ├── memmap v0.7.0
-│   │   │   └── libc v0.2.171
-│   │   ├── memoffset v0.9.1
-│   │   │   [build-dependencies]
-│   │   │   └── autocfg v1.4.0
-│   │   ├── nix v0.29.0 (*)
-│   │   ├── num-traits v0.2.19 (*)
-│   │   ├── pretty_env_logger v0.5.0
-│   │   │   ├── env_logger v0.10.2 (*)
-│   │   │   └── log v0.4.27 (*)
-│   │   ├── rand v0.8.5
-│   │   │   ├── libc v0.2.171
-│   │   │   ├── rand_chacha v0.3.1
-│   │   │   │   ├── ppv-lite86 v0.2.21
-│   │   │   │   │   └── zerocopy v0.8.24
-│   │   │   │   └── rand_core v0.6.4
-│   │   │   │       └── getrandom v0.2.15
-│   │   │   │           ├── cfg-if v1.0.0
-│   │   │   │           └── libc v0.2.171
-│   │   │   └── rand_core v0.6.4 (*)
-│   │   └── thiserror v1.0.69 (*)
-│   │   [build-dependencies]
-│   │   └── rustc_version v0.4.1
-│   │       └── semver v1.0.26
-│   ├── ahash v0.8.11
-│   │   ├── cfg-if v1.0.0
-│   │   ├── getrandom v0.2.15 (*)
-│   │   ├── once_cell v1.21.1
-│   │   └── zerocopy v0.7.35
-│   │   [build-dependencies]
-│   │   └── version_check v0.9.5
-│   ├── async-ringbuf v0.3.4
-│   │   ├── futures-util v0.3.31
-│   │   │   ├── futures-channel v0.3.31
-│   │   │   │   ├── futures-core v0.3.31
-│   │   │   │   └── futures-sink v0.3.31
-│   │   │   ├── futures-core v0.3.31
-│   │   │   ├── futures-io v0.3.31
-│   │   │   ├── futures-macro v0.3.31 (proc-macro)
-│   │   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   ├── quote v1.0.40 (*)
-│   │   │   │   └── syn v2.0.100 (*)
-│   │   │   ├── futures-sink v0.3.31
-│   │   │   ├── futures-task v0.3.31
-│   │   │   ├── memchr v2.7.4
-│   │   │   ├── pin-project-lite v0.2.16
-│   │   │   ├── pin-utils v0.1.0
-│   │   │   └── slab v0.4.9
-│   │   │       [build-dependencies]
-│   │   │       └── autocfg v1.4.0
-│   │   └── ringbuf v0.4.8
-│   │       └── crossbeam-utils v0.8.21
-│   ├── bytes v1.10.1
-│   ├── clap v4.5.32
-│   │   ├── clap_builder v4.5.32
-│   │   │   ├── anstream v0.6.18
-│   │   │   │   ├── anstyle v1.0.10
-│   │   │   │   ├── anstyle-parse v0.2.6
-│   │   │   │   │   └── utf8parse v0.2.2
-│   │   │   │   ├── anstyle-query v1.1.2
-│   │   │   │   ├── colorchoice v1.0.3
-│   │   │   │   ├── is_terminal_polyfill v1.70.1
-│   │   │   │   └── utf8parse v0.2.2
-│   │   │   ├── anstyle v1.0.10
-│   │   │   ├── clap_lex v0.7.4
-│   │   │   └── strsim v0.11.1
-│   │   └── clap_derive v4.5.32 (proc-macro)
-│   │       ├── heck v0.5.0
-│   │       ├── proc-macro2 v1.0.94 (*)
-│   │       ├── quote v1.0.40 (*)
-│   │       └── syn v2.0.100 (*)
-│   ├── dirs v5.0.1
-│   │   └── dirs-sys v0.4.1
-│   │       ├── libc v0.2.171
-│   │       └── option-ext v0.2.0
-│   ├── flexi_logger v0.29.8
-│   │   ├── chrono v0.4.40 (*)
-│   │   ├── crossbeam-channel v0.5.14
-│   │   │   └── crossbeam-utils v0.8.21
-│   │   ├── crossbeam-queue v0.3.12
-│   │   │   └── crossbeam-utils v0.8.21
-│   │   ├── log v0.4.27 (*)
-│   │   ├── nu-ansi-term v0.50.1
-│   │   ├── regex v1.11.1 (*)
-│   │   └── thiserror v2.0.12
-│   │       └── thiserror-impl v2.0.12 (proc-macro)
-│   │           ├── proc-macro2 v1.0.94 (*)
-│   │           ├── quote v1.0.40 (*)
-│   │           └── syn v2.0.100 (*)
-│   ├── futures v0.3.31
-│   │   ├── futures-channel v0.3.31 (*)
-│   │   ├── futures-core v0.3.31
-│   │   ├── futures-executor v0.3.31
-│   │   │   ├── futures-core v0.3.31
-│   │   │   ├── futures-task v0.3.31
-│   │   │   └── futures-util v0.3.31 (*)
-│   │   ├── futures-io v0.3.31
-│   │   ├── futures-sink v0.3.31
-│   │   ├── futures-task v0.3.31
-│   │   └── futures-util v0.3.31 (*)
-│   ├── futures-timer v3.0.3
-│   ├── futures-util v0.3.31 (*)
-│   ├── hdrhistogram v7.5.4
-│   │   ├── base64 v0.21.7
-│   │   ├── byteorder v1.5.0
-│   │   ├── crossbeam-channel v0.5.14 (*)
-│   │   ├── flate2 v1.1.0
-│   │   │   ├── crc32fast v1.4.2 (*)
-│   │   │   └── miniz_oxide v0.8.5
-│   │   │       └── adler2 v2.0.0
-│   │   ├── nom v7.1.3
-│   │   │   ├── memchr v2.7.4
-│   │   │   └── minimal-lexical v0.2.1
-│   │   └── num-traits v0.2.19 (*)
-│   ├── itoa v1.0.15
-│   ├── lazy_static v1.5.0
-│   ├── libc v0.2.171
-│   ├── log v0.4.27 (*)
-│   ├── nuclei v0.4.4
-│   │   ├── ahash v0.8.11 (*)
-│   │   ├── async-global-executor v2.4.1
-│   │   │   ├── async-channel v2.3.1
-│   │   │   │   ├── concurrent-queue v2.5.0
-│   │   │   │   │   └── crossbeam-utils v0.8.21
-│   │   │   │   ├── event-listener-strategy v0.5.3
-│   │   │   │   │   ├── event-listener v5.4.0
-│   │   │   │   │   │   ├── concurrent-queue v2.5.0 (*)
-│   │   │   │   │   │   ├── parking v2.2.1
-│   │   │   │   │   │   └── pin-project-lite v0.2.16
-│   │   │   │   │   └── pin-project-lite v0.2.16
-│   │   │   │   ├── futures-core v0.3.31
-│   │   │   │   └── pin-project-lite v0.2.16
-│   │   │   ├── async-executor v1.13.1
-│   │   │   │   ├── async-task v4.7.1
-│   │   │   │   ├── concurrent-queue v2.5.0 (*)
-│   │   │   │   ├── fastrand v2.3.0
-│   │   │   │   ├── futures-lite v2.6.0
-│   │   │   │   │   ├── fastrand v2.3.0
-│   │   │   │   │   ├── futures-core v0.3.31
-│   │   │   │   │   ├── futures-io v0.3.31
-│   │   │   │   │   ├── parking v2.2.1
-│   │   │   │   │   └── pin-project-lite v0.2.16
-│   │   │   │   └── slab v0.4.9 (*)
-│   │   │   ├── async-io v2.4.0
-│   │   │   │   ├── async-lock v3.4.0
-│   │   │   │   │   ├── event-listener v5.4.0 (*)
-│   │   │   │   │   ├── event-listener-strategy v0.5.3 (*)
-│   │   │   │   │   └── pin-project-lite v0.2.16
-│   │   │   │   ├── cfg-if v1.0.0
-│   │   │   │   ├── concurrent-queue v2.5.0 (*)
-│   │   │   │   ├── futures-io v0.3.31
-│   │   │   │   ├── futures-lite v2.6.0 (*)
-│   │   │   │   ├── parking v2.2.1
-│   │   │   │   ├── polling v3.7.4
-│   │   │   │   │   ├── cfg-if v1.0.0
-│   │   │   │   │   ├── rustix v0.38.44
-│   │   │   │   │   │   ├── bitflags v2.9.0
-│   │   │   │   │   │   └── linux-raw-sys v0.4.15
-│   │   │   │   │   └── tracing v0.1.41
-│   │   │   │   │       ├── pin-project-lite v0.2.16
-│   │   │   │   │       └── tracing-core v0.1.33
-│   │   │   │   ├── rustix v0.38.44 (*)
-│   │   │   │   ├── slab v0.4.9 (*)
-│   │   │   │   └── tracing v0.1.41 (*)
-│   │   │   ├── async-lock v3.4.0 (*)
-│   │   │   ├── blocking v1.6.1
-│   │   │   │   ├── async-channel v2.3.1 (*)
-│   │   │   │   ├── async-task v4.7.1
-│   │   │   │   ├── futures-io v0.3.31
-│   │   │   │   ├── futures-lite v2.6.0 (*)
-│   │   │   │   └── piper v0.2.4
-│   │   │   │       ├── atomic-waker v1.1.2
-│   │   │   │       ├── fastrand v2.3.0
-│   │   │   │       └── futures-io v0.3.31
-│   │   │   ├── futures-lite v2.6.0 (*)
-│   │   │   ├── once_cell v1.21.1
-│   │   │   └── tokio v1.44.1 (*)
-│   │   ├── crossbeam-channel v0.5.14 (*)
-│   │   ├── futures v0.3.31 (*)
-│   │   ├── lever v0.1.4
-│   │   │   ├── anyhow v1.0.97
-│   │   │   ├── crossbeam-epoch v0.9.18 (*)
-│   │   │   ├── itertools v0.10.5
-│   │   │   │   └── either v1.15.0
-│   │   │   ├── lazy_static v1.5.0
-│   │   │   ├── log v0.4.27 (*)
-│   │   │   ├── parking_lot v0.11.2
-│   │   │   │   ├── instant v0.1.13
-│   │   │   │   │   └── cfg-if v1.0.0
-│   │   │   │   ├── lock_api v0.4.12 (*)
-│   │   │   │   └── parking_lot_core v0.8.6
-│   │   │   │       ├── cfg-if v1.0.0
-│   │   │   │       ├── instant v0.1.13 (*)
-│   │   │   │       ├── libc v0.2.171
-│   │   │   │       └── smallvec v1.14.0
-│   │   │   ├── slice-group-by v0.2.6
-│   │   │   └── thiserror v1.0.69 (*)
-│   │   ├── libc v0.2.171
-│   │   ├── nuclei-attributes v0.1.0 (proc-macro)
-│   │   │   ├── quote v1.0.40 (*)
-│   │   │   └── syn v1.0.109
-│   │   │       ├── proc-macro2 v1.0.94 (*)
-│   │   │       ├── quote v1.0.40 (*)
-│   │   │       └── unicode-ident v1.0.18
-│   │   ├── once_cell v1.21.1
-│   │   ├── os_socketaddr v0.2.5
-│   │   │   └── libc v0.2.171
-│   │   ├── pin-project-lite v0.2.16
-│   │   ├── pin-utils v0.1.0
-│   │   ├── rustix v0.38.44 (*)
-│   │   ├── rustix-uring v0.2.0
-│   │   │   ├── bitflags v2.9.0
-│   │   │   └── rustix v0.38.44 (*)
-│   │   └── socket2 v0.3.19
-│   │       ├── cfg-if v1.0.0
-│   │       └── libc v0.2.171
-│   ├── num-traits v0.2.19 (*)
-│   ├── parking_lot v0.12.3 (*)
-│   ├── ringbuf v0.4.8 (*)
-│   ├── tempfile v3.19.1
-│   │   ├── fastrand v2.3.0
-│   │   ├── getrandom v0.3.2
-│   │   │   ├── cfg-if v1.0.0
-│   │   │   └── libc v0.2.171
-│   │   ├── once_cell v1.21.1
-│   │   └── rustix v1.0.3
-│   │       ├── bitflags v2.9.0
-│   │       └── linux-raw-sys v0.9.3
-│   ├── time v0.3.41
-│   │   ├── deranged v0.4.1
-│   │   │   └── powerfmt v0.2.0
-│   │   ├── itoa v1.0.15
-│   │   ├── num-conv v0.1.0
-│   │   ├── powerfmt v0.2.0
-│   │   ├── time-core v0.1.4
-│   │   └── time-macros v0.2.22 (proc-macro)
-│   │       ├── num-conv v0.1.0
-│   │       └── time-core v0.1.4
-│   └── uuid v1.16.0
-│       └── getrandom v0.3.2 (*)
-│   [build-dependencies]
-│   ├── askama v0.12.1
-│   │   ├── askama_derive v0.12.5 (proc-macro)
-│   │   │   ├── askama_parser v0.2.1
-│   │   │   │   └── nom v7.1.3
-│   │   │   │       ├── memchr v2.7.4
-│   │   │   │       └── minimal-lexical v0.2.1
-│   │   │   ├── basic-toml v0.1.10
-│   │   │   │   └── serde v1.0.219
-│   │   │   │       └── serde_derive v1.0.219 (proc-macro)
-│   │   │   │           ├── proc-macro2 v1.0.94 (*)
-│   │   │   │           ├── quote v1.0.40 (*)
-│   │   │   │           └── syn v2.0.100 (*)
-│   │   │   ├── mime v0.3.17
-│   │   │   ├── mime_guess v2.0.5
-│   │   │   │   ├── mime v0.3.17
-│   │   │   │   └── unicase v2.8.1
-│   │   │   │   [build-dependencies]
-│   │   │   │   └── unicase v2.8.1
-│   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   ├── quote v1.0.40 (*)
-│   │   │   ├── serde v1.0.219 (*)
-│   │   │   └── syn v2.0.100 (*)
-│   │   ├── askama_escape v0.10.3
-│   │   ├── humansize v2.1.3
-│   │   │   └── libm v0.2.11
-│   │   ├── num-traits v0.2.19 (*)
-│   │   └── percent-encoding v2.3.1
-│   ├── daachorse v1.0.0
-│   ├── isahc v1.7.2
-│   │   ├── async-channel v1.9.0
-│   │   │   ├── concurrent-queue v2.5.0 (*)
-│   │   │   ├── event-listener v2.5.3
-│   │   │   └── futures-core v0.3.31
-│   │   ├── castaway v0.1.2
-│   │   ├── crossbeam-utils v0.8.21
-│   │   ├── curl v0.4.47
-│   │   │   ├── curl-sys v0.4.80+curl-8.12.1
-│   │   │   │   ├── libc v0.2.171
-│   │   │   │   ├── libnghttp2-sys v0.1.11+1.64.0
-│   │   │   │   │   └── libc v0.2.171
-│   │   │   │   │   [build-dependencies]
-│   │   │   │   │   └── cc v1.2.17
-│   │   │   │   │       └── shlex v1.3.0
-│   │   │   │   ├── libz-sys v1.1.22
-│   │   │   │   │   └── libc v0.2.171
-│   │   │   │   │   [build-dependencies]
-│   │   │   │   │   ├── cc v1.2.17 (*)
-│   │   │   │   │   ├── pkg-config v0.3.32
-│   │   │   │   │   └── vcpkg v0.2.15
-│   │   │   │   └── openssl-sys v0.9.106
-│   │   │   │       └── libc v0.2.171
-│   │   │   │       [build-dependencies]
-│   │   │   │       ├── cc v1.2.17 (*)
-│   │   │   │       ├── pkg-config v0.3.32
-│   │   │   │       └── vcpkg v0.2.15
-│   │   │   │   [build-dependencies]
-│   │   │   │   ├── cc v1.2.17 (*)
-│   │   │   │   └── pkg-config v0.3.32
-│   │   │   ├── libc v0.2.171
-│   │   │   ├── openssl-probe v0.1.6
-│   │   │   ├── openssl-sys v0.9.106 (*)
-│   │   │   └── socket2 v0.5.8
-│   │   │       └── libc v0.2.171
-│   │   ├── curl-sys v0.4.80+curl-8.12.1 (*)
-│   │   ├── encoding_rs v0.8.35
-│   │   │   └── cfg-if v1.0.0
-│   │   ├── event-listener v2.5.3
-│   │   ├── futures-lite v1.13.0
-│   │   │   ├── fastrand v1.9.0
-│   │   │   ├── futures-core v0.3.31
-│   │   │   ├── futures-io v0.3.31
-│   │   │   ├── memchr v2.7.4
-│   │   │   ├── parking v2.2.1
-│   │   │   ├── pin-project-lite v0.2.16
-│   │   │   └── waker-fn v1.2.0
-│   │   ├── http v0.2.12
-│   │   │   ├── bytes v1.10.1
-│   │   │   ├── fnv v1.0.7
-│   │   │   └── itoa v1.0.15
-│   │   ├── log v0.4.27
-│   │   ├── mime v0.3.17
-│   │   ├── once_cell v1.21.1
-│   │   ├── polling v2.8.0
-│   │   │   ├── cfg-if v1.0.0
-│   │   │   ├── libc v0.2.171
-│   │   │   └── log v0.4.27
-│   │   │   [build-dependencies]
-│   │   │   └── autocfg v1.4.0
-│   │   ├── slab v0.4.9 (*)
-│   │   ├── sluice v0.5.5
-│   │   │   ├── async-channel v1.9.0 (*)
-│   │   │   ├── futures-core v0.3.31
-│   │   │   └── futures-io v0.3.31
-│   │   ├── tracing v0.1.41
-│   │   │   ├── log v0.4.27
-│   │   │   ├── pin-project-lite v0.2.16
-│   │   │   ├── tracing-attributes v0.1.28 (proc-macro)
-│   │   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   ├── quote v1.0.40 (*)
-│   │   │   │   └── syn v2.0.100 (*)
-│   │   │   └── tracing-core v0.1.33
-│   │   │       └── once_cell v1.21.1
-│   │   ├── tracing-futures v0.2.5
-│   │   │   ├── pin-project v1.1.10
-│   │   │   │   └── pin-project-internal v1.1.10 (proc-macro)
-│   │   │   │       ├── proc-macro2 v1.0.94 (*)
-│   │   │   │       ├── quote v1.0.40 (*)
-│   │   │   │       └── syn v2.0.100 (*)
-│   │   │   └── tracing v0.1.41 (*)
-│   │   ├── url v2.5.4
-│   │   │   ├── form_urlencoded v1.2.1
-│   │   │   │   └── percent-encoding v2.3.1
-│   │   │   ├── idna v1.0.3
-│   │   │   │   ├── idna_adapter v1.2.0
-│   │   │   │   │   ├── icu_normalizer v1.5.0
-│   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro)
-│   │   │   │   │   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │   ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │   └── syn v2.0.100 (*)
-│   │   │   │   │   │   ├── icu_collections v1.5.0
-│   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   ├── yoke v0.7.5
-│   │   │   │   │   │   │   │   ├── stable_deref_trait v1.2.0
-│   │   │   │   │   │   │   │   ├── yoke-derive v0.7.5 (proc-macro)
-│   │   │   │   │   │   │   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │   │   │   ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │   │   │   ├── syn v2.0.100 (*)
-│   │   │   │   │   │   │   │   │   └── synstructure v0.13.1
-│   │   │   │   │   │   │   │   │       ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │   │   │       ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │   │   │       └── syn v2.0.100 (*)
-│   │   │   │   │   │   │   │   └── zerofrom v0.1.6
-│   │   │   │   │   │   │   │       └── zerofrom-derive v0.1.6 (proc-macro)
-│   │   │   │   │   │   │   │           ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │   │           ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │   │           ├── syn v2.0.100 (*)
-│   │   │   │   │   │   │   │           └── synstructure v0.13.1 (*)
-│   │   │   │   │   │   │   ├── zerofrom v0.1.6 (*)
-│   │   │   │   │   │   │   └── zerovec v0.10.4
-│   │   │   │   │   │   │       ├── yoke v0.7.5 (*)
-│   │   │   │   │   │   │       ├── zerofrom v0.1.6 (*)
-│   │   │   │   │   │   │       └── zerovec-derive v0.10.3 (proc-macro)
-│   │   │   │   │   │   │           ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │           ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │           └── syn v2.0.100 (*)
-│   │   │   │   │   │   ├── icu_normalizer_data v1.5.0
-│   │   │   │   │   │   ├── icu_properties v1.5.1
-│   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   ├── icu_collections v1.5.0 (*)
-│   │   │   │   │   │   │   ├── icu_locid_transform v1.5.0
-│   │   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   │   ├── icu_locid v1.5.0
-│   │   │   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   │   │   ├── litemap v0.7.5
-│   │   │   │   │   │   │   │   │   ├── tinystr v0.7.6
-│   │   │   │   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   │   │   │   │   ├── writeable v0.5.5
-│   │   │   │   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   │   │   │   ├── icu_locid_transform_data v1.5.0
-│   │   │   │   │   │   │   │   ├── icu_provider v1.5.0
-│   │   │   │   │   │   │   │   │   ├── displaydoc v0.2.5 (proc-macro) (*)
-│   │   │   │   │   │   │   │   │   ├── icu_locid v1.5.0 (*)
-│   │   │   │   │   │   │   │   │   ├── icu_provider_macros v1.5.0 (proc-macro)
-│   │   │   │   │   │   │   │   │   │   ├── proc-macro2 v1.0.94 (*)
-│   │   │   │   │   │   │   │   │   │   ├── quote v1.0.40 (*)
-│   │   │   │   │   │   │   │   │   │   └── syn v2.0.100 (*)
-│   │   │   │   │   │   │   │   │   ├── stable_deref_trait v1.2.0
-│   │   │   │   │   │   │   │   │   ├── tinystr v0.7.6 (*)
-│   │   │   │   │   │   │   │   │   ├── writeable v0.5.5
-│   │   │   │   │   │   │   │   │   ├── yoke v0.7.5 (*)
-│   │   │   │   │   │   │   │   │   ├── zerofrom v0.1.6 (*)
-│   │   │   │   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   │   │   │   ├── tinystr v0.7.6 (*)
-│   │   │   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   │   │   ├── icu_properties_data v1.5.0
-│   │   │   │   │   │   │   ├── icu_provider v1.5.0 (*)
-│   │   │   │   │   │   │   ├── tinystr v0.7.6 (*)
-│   │   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   │   ├── icu_provider v1.5.0 (*)
-│   │   │   │   │   │   ├── smallvec v1.14.0
-│   │   │   │   │   │   ├── utf16_iter v1.0.5
-│   │   │   │   │   │   ├── utf8_iter v1.0.4
-│   │   │   │   │   │   ├── write16 v1.0.0
-│   │   │   │   │   │   └── zerovec v0.10.4 (*)
-│   │   │   │   │   └── icu_properties v1.5.1 (*)
-│   │   │   │   ├── smallvec v1.14.0
-│   │   │   │   └── utf8_iter v1.0.4
-│   │   │   └── percent-encoding v2.3.1
-│   │   └── waker-fn v1.2.0
-│   ├── regex v1.11.1 (*)
-│   ├── tempfile v3.19.1 (*)
-│   └── xz2 v0.1.7
-│       └── lzma-sys v0.1.20
-│           └── libc v0.2.171
-│           [build-dependencies]
-│           ├── cc v1.2.17 (*)
-│           └── pkg-config v0.3.32
-├── tokio v1.44.1 (*)
-├── ullfs-common v0.1.0 (/home/zmanjaroschool/ullfs/ullfs-common)
-│   ├── aya v0.12.0
-│   │   ├── assert_matches v1.5.0
-│   │   ├── aya-obj v0.1.0
-│   │   │   ├── bytes v1.10.1
-│   │   │   ├── core-error v0.0.0 (*)
-│   │   │   ├── hashbrown v0.14.5
-│   │   │   │   ├── ahash v0.8.11 (*)
-│   │   │   │   └── allocator-api2 v0.2.21
-│   │   │   ├── log v0.4.27 (*)
-│   │   │   ├── object v0.32.2
-│   │   │   │   └── memchr v2.7.4
-│   │   │   └── thiserror v1.0.69 (*)
-│   │   ├── bitflags v2.9.0
-│   │   ├── bytes v1.10.1
-│   │   ├── lazy_static v1.5.0
-│   │   ├── libc v0.2.171
-│   │   ├── log v0.4.27 (*)
-│   │   ├── object v0.32.2 (*)
-│   │   └── thiserror v1.0.69 (*)
-│   ├── aya-ebpf v0.1.1
-│   │   ├── aya-ebpf-bindings v0.1.1
-│   │   │   └── aya-ebpf-cty v0.2.2
-│   │   ├── aya-ebpf-cty v0.2.2
-│   │   └── aya-ebpf-macros v0.1.1 (proc-macro)
-│   │       ├── proc-macro-error v1.0.4
-│   │       │   ├── proc-macro-error-attr v1.0.4 (proc-macro)
-│   │       │   │   ├── proc-macro2 v1.0.94 (*)
-│   │       │   │   └── quote v1.0.40 (*)
-│   │       │   │   [build-dependencies]
-│   │       │   │   └── version_check v0.9.5
-│   │       │   ├── proc-macro2 v1.0.94 (*)
-│   │       │   └── quote v1.0.40 (*)
-│   │       │   [build-dependencies]
-│   │       │   └── version_check v0.9.5
-│   │       ├── proc-macro2 v1.0.94 (*)
-│   │       ├── quote v1.0.40 (*)
-│   │       └── syn v2.0.100 (*)
-│   │   [build-dependencies]
-│   │   └── rustversion v1.0.20 (proc-macro)
-│   └── aya-log-ebpf v0.1.1
-│       ├── aya-ebpf v0.1.1 (*)
-│       ├── aya-log-common v0.1.15 (*)
-│       └── aya-log-ebpf-macros v0.1.0 (proc-macro)
-│           ├── aya-log-common v0.1.15 (*)
-│           ├── aya-log-parser v0.1.13
-│           │   └── aya-log-common v0.1.15 (*)
-│           ├── proc-macro2 v1.0.94 (*)
-│           ├── quote v1.0.40 (*)
-│           └── syn v2.0.100 (*)
-└── xxhash-rust v0.8.15
-[dev-dependencies]
-├── async-std v1.13.1
-│   ├── async-attributes v1.1.2 (proc-macro)
-│   │   ├── quote v1.0.40 (*)
-│   │   └── syn v1.0.109 (*)
-│   ├── async-channel v1.9.0 (*)
-│   ├── async-global-executor v2.4.1 (*)
-│   ├── async-io v2.4.0 (*)
-│   ├── async-lock v3.4.0 (*)
-│   ├── crossbeam-utils v0.8.21
-│   ├── futures-core v0.3.31
-│   ├── futures-io v0.3.31
-│   ├── futures-lite v2.6.0 (*)
-│   ├── kv-log-macro v1.0.7
-│   │   └── log v0.4.27 (*)
-│   ├── log v0.4.27 (*)
-│   ├── memchr v2.7.4
-│   ├── once_cell v1.21.1
-│   ├── pin-project-lite v0.2.16
-│   ├── pin-utils v0.1.0
-│   └── slab v0.4.9 (*)
-└── futures-timer v3.0.3
+mod args;
+use anyhow::Error;
+use aya::{include_bytes_aligned, maps::{Array, AsyncPerfEventArray, PerCpuArray}, programs::KProbe, util::online_cpus, Ebpf};
+use bytes::{Buf, BytesMut};
+use serde_json::Value;
+use structopt::StructOpt;
+#[allow(unused_imports)]
+use log::*;
+use crate::args::Args;
+use std::{fs, io::BufReader, process, sync::Arc, time::Duration};
+use steady_state::*;
+mod client;
+pub mod filehasher;
+pub mod fileFilter;
+pub mod createPacket;
+pub mod fileDifs;
+pub mod hashFileDif;
+pub mod client_tcp;
+mod actor {
+    
+        pub mod ebpf_listener;
+        // pub mod tcp_worker;
+        // pub mod handle_client;
+}
+
+fn main() {
+    let opt = Args::from_args();
+
+    let service_executable_name = "ullfs";
+    let service_user = "ullfs_user";
+    let systemd_command = SystemdBuilder::process_systemd_commands(  opt.systemd_action()
+                                                   , opt.to_cli_string(service_executable_name).as_str()
+                                                   , service_user);
+
+    if !systemd_command {
+        info!("Starting up");
+        let mut graph = build_graph(GraphBuilder::for_production()
+                                .with_telemtry_production_rate_ms(200)
+                                .build(opt.clone()) );
+
+        graph.start();
+
+
+        graph.block_until_stopped(Duration::from_secs(2));
+    }
+}
+
+fn build_graph(mut graph: Graph) -> Graph {
+
+    //this common root of the channel builder allows for common config of all channels
+    let base_channel_builder = graph.channel_builder()
+        .with_type()
+        .with_line_expansion(1.0f32);
+
+    //this common root of the actor builder allows for common config of all actors
+    let base_actor_builder = graph.actor_builder()
+        .with_mcpu_percentile(Percentile::p80())
+        .with_load_percentile(Percentile::p80());
+
+    //build channels
+    //{Index, Value, Flags}
+    // let t = tokio::signal::ctrl_c().await;
+    // println!("Exiting");
+    
+    //build actors
+    
+    {
+        
+        let state = new_state();
+        let ebpf_tx: Vec<SteadyTx<Box<String>>> = Vec::new();
+        let ebpf_rx: Vec<SteadyRx<Box<String>>> = Vec::new();
+        // let mut tcp_msg_rx = tcp_msg_rx.lock().await;
+        // println!("Running ebpf_builder"); // Why is ebpf_builder running twice?
+
+    // let dif = fileDifs::FileData::get_instance();
+    // let old = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
+    // let t = tokio::signal::ctrl_c().await;
+    // let new = dif.get_file_delta("/home/zmanjaroschool/TestDir/testDif.txt");
+    // println!("Old size: {}. New size: {}", old.1.len(), new.1.len());
+    // println!("New start: {}. New end: {}", new.0, new.2);
+    // return Ok(());
+    // env_logger::init();
+    
+    // Bump the memlock rlimit. This is needed for older kernels that don't use the
+    // new memcg based accounting, see https://lwn.net/Articles/837122/
+    let rlim = libc::rlimit {
+        rlim_cur: libc::RLIM_INFINITY,
+        rlim_max: libc::RLIM_INFINITY,
+    };
+    let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
+    if ret != 0 {
+        debug!("remove limit on locked memory failed, ret is: {}", ret);
+    }
+
+    // This will include your eBPF object file as raw bytes at compile-time and load it at
+    // runtime. This approach is recommended for most real-world use cases. If you would
+    // like to specify the eBPF program at runtime rather than at compile-time, you can
+    // reach for `Bpf::load_file` instead.
+        #[cfg(debug_assertions)]
+        let mut bpf: Ebpf = Ebpf::load(include_bytes_aligned!(
+            "../../target/bpfel-unknown-none/debug/ullfs"
+        )).expect("Failed to load ebpf code");
+        #[cfg(not(debug_assertions))]
+        let mut bpf: Ebpf = Ebpf::load(include_bytes_aligned!(
+            "../../target/bpfel-unknown-none/release/ullfs"
+        ))?;
+        // if let Err(e) = BpfLogger::init(&mut bpf) {
+        //     // This can happen if you remove all log statements from your eBPF program.
+        //     warn!("failed to initialize eBPF logger: {}", e);
+        // }
+
+        {
+            let program: &mut KProbe = bpf.program_mut("vfs_write").unwrap().try_into().expect("Failed to create mutable program");
+            program.load().expect("Failed to create mutable program");
+            program.attach("vfs_write", 0).expect("Failed to attach to vfs_write");
+        }
+
+        {
+            let program: &mut KProbe = bpf.program_mut("vfs_mkdir").unwrap().try_into().expect("Failed to create mutable program");
+            program.load().expect("Failed to create mutable program");
+            program.attach("vfs_mkdir", 0).expect("Failed to attach to vfs_mkdir");
+        }
+
+        {
+            let program: &mut KProbe = bpf.program_mut("vfs_rmdir").unwrap().try_into().expect("Failed to create mutable program for vfs_rmdir");
+            program.load().expect("failed to load for vfs_rmdir");
+            program.attach("vfs_rmdir", 0).expect("Failed to attach to vfs_rmdir");
+        }
+
+        {
+            let program: &mut KProbe = bpf.program_mut("vfs_rename").unwrap().try_into().expect("Failed to create mutable program");
+            program.load().expect("Failed to load program for vfs_rename");
+            program.attach("vfs_rename", 0).expect("Failed to attach ebpf program to vfs_rename");
+        }
+
+        //*Lets read the config file */
+        let conf_file : fs::File = match fs::File::open("./config.json"){
+            Ok(x) => x,
+            Err(e) => {
+                panic!("Error: config.json missing or destroyed.\n{}", e)
+            }
+        };
+        // Convert to buffer for serde_json
+        let reader = BufReader::new(conf_file);
+        let conf : Value = match serde_json::from_reader(reader){
+            Ok(x) => x,
+            Err(e) => {
+                panic!("Error: config.json structure damaged.\n{}", e);
+            }
+        }; 
+        // Read from the json structure (Basically acts as a hashmap at this point)
+        let watch_dir : &str = match &conf["watch_dir"].as_str() {
+            None => {
+                panic!("Error: watch_dir was not a string in config.json");
+            }
+            Some(x) => x,
+        };
+        let watch_dir_string : String = String::from(watch_dir);
+        // Debugging data
+        // println!("Conf file output: {}", &watch_dir);
+        // Get the metadata from the watch_dirvfs_mkdir
+        let w_dir = match fs::metadata(watch_dir){
+            Ok(x) => x,
+            Err(e) => {
+                panic!("Error: Directory {} not found, something must be wrong with your config file\n{}", &watch_dir, e);
+            }
+        };
+        // Get the inode from the metadata
+        let block_addr: u64 = std::os::linux::fs::MetadataExt::st_ino(&w_dir);
+        println!("Block Address: {}", block_addr);
+        {
+            // Initialize the inode map
+            let mut inodesdata: Array<_, u64> = Array::try_from(bpf.take_map("INODEDATA").unwrap()).expect("Failed to take inodesdata");
+            inodesdata.set(0, block_addr, 0).expect("Failed to set inodesdata");
+        }
+        {
+            // Initialize the program data map
+            // ID 0: PID for this program
+            let mut progdata: Array<_, u64> = Array::try_from(bpf.take_map("PROGDATA").unwrap()).expect("Failed to take from array");
+            let progid = process::id();
+            let progid_64 : u64 = u64::from(progid);
+            progdata.set(0, progid_64, 0).expect("Failed to set progdata");
+        }
+        for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
+            let (ebpf_listener_conn_tx: LazySteadyTx<Box<String>>, ebpf_listener_conn_rx : LazySteadyRx<Box<String>>) = base_channel_builder.build();
+            // ebpf_tx.push(ebpf_listener_conn_tx.clone());
+            // ebpf_rx.push(ebpf_listener_conn_rx.clone());
+            base_actor_builder.with_name("EbpfListenerActor")
+                 .build( move |context| actor::ebpf_listener::run(context
+                                            , ebpf_listener_conn_tx.clone()
+                                            , state.clone(),
+                                            &mut bpf,
+                                        cpu_id)
+                  , &mut Threading::Spawn );
+        }  
+     
+    }
+    
+    
+    graph
+}
+
+#[cfg(test)]
+mod graph_tests {
+    use async_std::test;
+    use steady_state::*;
+    use std::time::Duration;
+    use crate::args::Args;
+    use crate::build_graph;
+    use std::ops::DerefMut;
+    use futures_timer::Delay;
+
+    #[test]
+    async fn test_graph_one() {
+
+            let test_ops = Args {
+                loglevel: "debug".to_string(),
+                systemd_install: false,
+                systemd_uninstall: false,
+            };
+            let mut graph = build_graph( GraphBuilder::for_testing().build(test_ops.clone()) );
+            graph.start();
+            let mut guard = graph.sidechannel_director().await;
+            let g = guard.deref_mut();
+            assert!(g.is_some(), "Internal error, this is a test so this back channel should have been created already");
+            if let Some(_plane) = g {
+
+             //NOTE: to ensure the node_call is for the correct channel for a given actor unique types for each channel are required
+
+            
+
+              // //TODO:   if needed you may want to add a delay right here to allow the graph to process the message
+              Delay::new(Duration::from_millis(100)).await;
+
+             
+
+            }
+            drop(guard);
+            graph.request_stop();
+            graph.block_until_stopped(Duration::from_secs(3));
+        }
+    }
