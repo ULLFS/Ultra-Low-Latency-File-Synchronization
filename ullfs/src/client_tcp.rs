@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, collections::HashMap, fs, io::{BufRead, BufReader},
 use serde_json::Value;
 use std::io::{Write, Read};
 
-use crate::fileFilter;
+use crate::{fileDifs, fileFilter};
 
 static INSTANCE :OnceLock<Connections> = OnceLock::new();
 struct Connections {
@@ -70,13 +70,15 @@ pub fn write_full_file_to_connections(filepath: &str){
     let mut addr = Connections::get_instance().addresses.write().unwrap();
     for (address, connection) in addr.iter() {
         let mut c = *connection;
-        match c.read(&mut []){
-            Ok(x) => {}
-            Err(_) => {
-                Connections::get_instance().check_connections_config();
+        println!("Writing to {}", address);
+        // match c.read(&mut []){
+        //     Ok(x) => {}
+        //     Err(_) => {
+        //         Connections::get_instance().check_connections_config();
                 
-            }
-        }
+        //     }
+        // }
+        // println!("c.read complete");
         let base_path = fileFilter::Filter::get_instance().get_base_dir();
         let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
         let mut relative_path_bytes = relative_path.into_bytes();
@@ -116,4 +118,53 @@ pub fn write_full_file_to_connections(filepath: &str){
         
     }
 }
+pub fn write_delta_file_to_connections(delta: &fileDifs::Delta, filepath: &str){
+    let mut addr = Connections::get_instance().addresses.write().unwrap();
+    for (address, connection) in addr.iter() {
+        let mut c = *connection;
+        println!("Writing to {}", address);
+        // match c.read(&mut []){
+        //     Ok(x) => {}
+        //     Err(_) => {
+        //         Connections::get_instance().check_connections_config();
+                
+        //     }
+        // }
+        // println!("c.read complete");
+        let base_path = fileFilter::Filter::get_instance().get_base_dir();
+        let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
+        println!("{}", relative_path);
+        let mut relative_path_bytes = relative_path.into_bytes();
+        relative_path_bytes.push(0b0000);
+        relative_path_bytes.push(2u8);
+        let data_len = delta.data.len();
+        println!("Start index: {}", delta.start_index);
+        for byte in delta.start_index.to_le_bytes() {
+            relative_path_bytes.push(byte);
+        }
+        println!("End index: {}", delta.end_index);
+        
+        for byte in delta.end_index.to_le_bytes() {
+            relative_path_bytes.push(byte);
+        }
+        println!("Data length: {}", data_len);
+        for byte in data_len.to_le_bytes() {
+            relative_path_bytes.push(byte);            
+        }
+        println!("Hash: {}", delta.old_hash);
+        for byte in delta.old_hash.to_le_bytes() {
+            println!("Byte: {}", byte);
+            
+            relative_path_bytes.push(byte);
+        }
+        for byte in delta.data.iter() {
+            relative_path_bytes.push(*byte);
+        }
+        c.write(&relative_path_bytes);
+        // relative_path_bytes.push(delta.start_index.to_le_bytes());
+        // c.flush();
 
+        
+                        
+    }
+}

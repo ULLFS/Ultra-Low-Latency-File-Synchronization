@@ -7,7 +7,7 @@ use structopt::StructOpt;
 #[allow(unused_imports)]
 use log::*;
 use crate::args::Args;
-use std::{fs, io::BufReader, process, sync::Arc, time::Duration};
+use std::{fs, io::BufReader, process, sync::Arc, thread::Thread, time::Duration};
 use steady_state::*;
 mod client;
 pub mod filehasher;
@@ -20,6 +20,8 @@ mod actor {
     
         pub mod ebpf_listener;
         pub mod ram_cleaner;
+        pub mod tcp_sender;
+        pub mod connection_handler;
         // pub mod tcp_worker;
         // pub mod handle_client;
 }
@@ -69,24 +71,38 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         
         let state = new_state();
-        let ebpf_tx: Vec<SteadyTx<Box<String>>> = Vec::new();
-        let ebpf_rx: Vec<SteadyRx<Box<String>>> = Vec::new();
-        
-        // for cpu_id in online_cpus().map_err(|(_, error)| error).expect("Failed to get online cpus"){
         let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
-        // ebpf_tx.push(ebpf_listener_conn_tx.clone());
-        // ebpf_rx.push(ebpf_listener_conn_rx.clone());
+        // let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder.build();
+
+
+        // Detects all changes in the file system thanks to eBPF.
+        // This thing was annoying to build
         base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
                                             , ebpf_listener_conn_tx.clone()
                                             , state.clone())
                   , &mut Threading::Spawn );
-        // }  
-        // base_actor_builder.with_name("RamCleanerActor")
-        //             .build(move | context | actor::ram_cleaner::run(context,
-        //                                      state.clone())
-        //             ,&mut Threading::Spawn);
-     
+        // Cleans the ram on a timeout, every minute looping through each of our files stored in ram
+        // To see if we need to clean 
+        let state = new_state();
+        base_actor_builder.with_name("RamCleanerActor")
+                    .build(move | context | actor::ram_cleaner::run(context,
+                                             state.clone())
+                    ,&mut Threading::Spawn);
+        // Sends data over TCP. Just tell it what file to send and it should handle it from there
+        let state = new_state();
+        base_actor_builder.with_name("TCPSenderActor")
+                        .build(move | context | actor::tcp_sender::run(context, 
+                            ebpf_listener_conn_rx.clone(), 
+                            // tcp_listener_conn_rx.clone(),
+                            state.clone()),
+                    &mut Threading::Spawn);
+        // Listens over TCP, will handle reconnecting when connections are lost and full file transmission in case of error
+        let state = new_state();
+        base_actor_builder.with_name("TCPListenerActor")
+                            .build(move | context | actor::connection_handler::run(context, state.clone()),
+                            &mut Threading::Spawn);
+        
     }
     
     

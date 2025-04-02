@@ -8,13 +8,13 @@ use std::sync::{OnceLock, RwLock};
 static INSTANCE: OnceLock<FileData> = OnceLock::new();
 pub struct File {
     data: Vec<u8>,
-    start_time: SystemTime,
+    time_remaining: u32,
 }
 impl File {
-    fn new(data: Vec<u8>, start_time : SystemTime) -> Self {
+    fn new(data: Vec<u8>, time_remaining : u32) -> Self {
         File {
             data: data,
-            start_time: start_time
+            time_remaining: time_remaining
         }
     }
 }
@@ -35,7 +35,7 @@ impl Delta {
     }
 }
 pub struct FileData{
-    file_map: RwLock<HashMap<&'static str, &'static File>>,
+    file_map: RwLock<HashMap<&'static str, &'static mut File>>,
     file_store_time: u32,
     max_total_size: u32,
     cur_total_size: u32
@@ -70,7 +70,7 @@ impl FileData {
         };
 
         // let map: HashMap<String, File> = );
-        let map: HashMap<&'static str, &'static File> = HashMap::new();
+        let map: HashMap<&'static str, &'static mut File> = HashMap::new();
         FileData { 
             file_map: RwLock::new(map),
             file_store_time: file_store_time,
@@ -88,6 +88,50 @@ impl FileData {
     // async fn timeout(){
         
     // }
+    pub fn clean_ram(&self, minutes_passed: u32) -> bool{
+        let mut remove_files = Vec::new();
+
+        let mut files = match self.file_map.try_write(){
+            Ok(mut files) => {
+                
+                files
+            }
+            Err(_) => {
+                // if we get an error, just assume we can't clean ram right now and something else is
+                // messing with the file storage.
+                // I elected to skip this clean cycle rather than waiting
+                // The future cycle will know how many minutes have passed because it will check this return value
+                // On false, the clean cycle was skipped so incremement num minutes
+                return false;
+            }
+        };
+        for (filename, mut file) in files.iter_mut(){
+            if file.time_remaining >= minutes_passed {
+                file.time_remaining -= minutes_passed;
+            } else {
+                // files.remove(filename);
+                remove_files.push(filename);
+            }
+        }
+        let mut files = match self.file_map.try_write(){
+            Ok(mut files) => {
+                
+                files
+            }
+            Err(_) => {
+                // if we get an error, just assume we can't clean ram right now and something else is
+                // messing with the file storage.
+                // I elected to skip this clean cycle rather than waiting
+                // The future cycle will know how many minutes have passed because it will check this return value
+                // On false, the clean cycle was skipped so incremement num minutes
+                return false;
+            }
+        };
+        for filename in remove_files{
+            files.remove(filename);
+        }
+        return true;
+    }
     pub fn get_file_delta(&self, path : &str) -> Delta{
         println!("{}", path);
         let mut f = fs::File::open(&path).expect(format!("File not found {}", path).as_str());
@@ -112,10 +156,10 @@ impl FileData {
                 let data_clone = buf.clone();
                 // println!("B");
                 
-                let f: File = File::new(buf, SystemTime::now());
+                let f: File = File::new(buf, self.file_store_time);
                 // Create a static str:
                 let path_static: &'static str = Box::leak(Box::new(path.to_string()));
-                let f_static : &'static File = Box::leak(Box::new(f));
+                let f_static : &'static mut File = Box::leak(Box::new(f));
                 map.insert(path_static, f_static);
                 return Delta::new(0,0, data_clone, 0);
                 
@@ -123,7 +167,7 @@ impl FileData {
         };
         let output_data = get_delta(&file_data.data, &buf);
         
-        let f = File::new(buf, SystemTime::now());
+        let f = File::new(buf, self.file_store_time);
         *map.get_mut(path).unwrap() = Box::leak(Box::new(f));
         return output_data;
     }
