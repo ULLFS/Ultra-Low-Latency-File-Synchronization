@@ -49,13 +49,13 @@ impl Filter{
         let mut ignoreBuilder: GitignoreBuilder = GitignoreBuilder::new(watch_dir.clone());
 
         for val in ignore_rules{
-            let valStr: String = match val.as_str(){
+            let val_Str: String = match val.as_str(){
                 None => {
                     panic!("Error: value in ignore was not a string in config.json");
                 }
                 Some(x) => x.to_string(),
             };
-            match ignoreBuilder.add_line(None, valStr.as_str()){
+            match ignoreBuilder.add_line(None, val_Str.as_str()){
                 Ok(_) => (),
                 Err(e) => {
                     panic!("Error: Mistake in ignore. Treat each element of the array as gitignore line. {}", e);

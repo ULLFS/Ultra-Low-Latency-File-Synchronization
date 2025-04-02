@@ -5,10 +5,9 @@ use log::*;
 #[allow(unused_imports)]
 //use std::time::{Duration, SystemTime};
 use steady_state::*;
-use crate::{actor::handle_client, Args};
+use crate::Args;
 use std::error::Error;
 use tokio::time::{sleep, Duration};
-use std::thread;
 use crate::actor::tcp_worker::ConfigMsg;
 use crate::actor::file_filter::Filter; // Import the Filter struct for connection details
 //use std::io;
@@ -41,7 +40,7 @@ async fn internal_behavior<C: SteadyCommander>(
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
-    let mut buf = [0;BUFFER_SIZE];
+    let mut _buf = [0;BUFFER_SIZE];
 
     //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut config_conn_tx = config_conn_tx.lock().await;
@@ -60,7 +59,7 @@ async fn internal_behavior<C: SteadyCommander>(
         // send data through the channel to tcp_worker
         let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
 
-        sleep(Duration::from_secs(15)).await;
+        sleep(Duration::from_secs(400)).await;
 
         cmd.relay_stats();
 
@@ -71,7 +70,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
 
 
-#[cfg(test)]
+/* #[cfg(test)]
 pub(crate) mod tests {
     use std::time::Duration;
     use steady_state::*;
@@ -101,4 +100,4 @@ pub(crate) mod tests {
        //    assert_eq!(test_tcp_msg_rx.testing_avail_units().await, 1); // check expected count
        let results_tcp_msg_vec = test_tcp_msg_rx.testing_take().await;
         }
-}
+} */

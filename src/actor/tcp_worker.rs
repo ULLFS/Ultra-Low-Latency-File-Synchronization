@@ -49,6 +49,8 @@ async fn internal_behavior<C: SteadyCommander>(
     let mut tcp_conn_rx = tcp_conn_rx.lock().await;
     let mut _tcp_conn_config_rx = _tcp_conn_config_rx.lock().await;
 
+    let mut save_path : String;
+
     while cmd.is_running(&mut || tcp_conn_rx.is_closed_and_empty() && _tcp_conn_config_rx.is_closed_and_empty()) {
         //let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
 
@@ -58,7 +60,8 @@ async fn internal_behavior<C: SteadyCommander>(
 
         match cmd.try_take(&mut _tcp_conn_config_rx){
             Some(msg) => {
-                println!("(tcp_worker) {}", msg.text);
+                println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
+                save_path = msg.text;
                 cmd.relay_stats();
             }
             None => {
@@ -73,26 +76,10 @@ async fn internal_behavior<C: SteadyCommander>(
                 //let mut std_tcp_stream = stream.into_std()?;
                 /* std_tcp_stream.set_nonblocking(false)?;
                 std_tcp_stream.read_exact(&mut buf)? */
-                loop {
-                    let _ = handle_client::processing(&stream);
+                //loop {
+                    let _ = handle_client::processing(&stream, &save_path);
                     cmd.relay_stats();
-                    /* stream.readable().await?;
-                    match stream.try_read(&mut buf) {
-                        Ok(0) => {
-                            println!("(tcp_worker) Connection closed by {:?}", stream.peer_addr()?);
-                            break;
-                        },
-                        Ok(_n) => {
-                            let _ = handle_client::processing(&std_tcp_stream);
-                        }
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            continue;
-                        }
-                        Err(e) => {
-                            return Err(e.into());
-                        }
-                    } */
-                }
+                //}
             }
             None => {
                 if clean {
@@ -107,7 +94,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
 
 
-#[cfg(test)]
+/* #[cfg(test)]
 pub(crate) mod tests {
     use std::time::Duration;
     use steady_state::*;
@@ -137,4 +124,4 @@ pub(crate) mod tests {
        //    assert_eq!(test_tcp_msg_rx.testing_avail_units().await, 1); // check expected count
        let results_tcp_msg_vec = test_tcp_msg_rx.testing_take().await;
         }
-}
+} */

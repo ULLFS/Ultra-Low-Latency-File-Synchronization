@@ -7,7 +7,7 @@ use std::{env::temp_dir, error::Error, fs::{self, File}, io::{BufRead, BufReader
 use tokio::net::{TcpStream, TcpListener};
 // use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 use xxhash_rust::xxh3::xxh3_64;
-const HOMEDIR: &str = "";
+
 #[derive(PartialEq, Eq)]
 enum State {
     Filepath,
@@ -24,11 +24,12 @@ enum State {
 }
 // use std::io::Write;
 
-const SAVE_PATH: &str = "/home/zmanjaroschool/TestDir3";
+//const SAVE_PATH: &str = "/home/trevor/Documents/TestDir3";
 
-fn ask_for_file(file: &String, stream: &TcpStream){
+fn ask_for_file(file: &String, _stream: &TcpStream){
     println!("Got the wrong hash for the file: {}", file);
 }
+
 fn filepath_state(b: u8, state: &mut State, filepath: &mut String, curbyte: usize, total_bytes: usize) {
     if b == 0b0000 {
         println!("Changing to flag state, {}, {}", curbyte, total_bytes);
@@ -40,7 +41,8 @@ fn filepath_state(b: u8, state: &mut State, filepath: &mut String, curbyte: usiz
         println!("{}", filepath);
     }
 }
-fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, reader: &mut Option<BufReader<File>>, cur_index: &mut u64, curbyte: usize, total_bytes: usize, filepath: &String){
+
+fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, reader: &mut Option<BufReader<File>>, cur_index: &mut u64, curbyte: usize, total_bytes: usize, file_path: &String, save_path : &String){
     println!("In flag state {}, {}", curbyte, total_bytes);
     match b {
         1u8 => {
@@ -51,7 +53,7 @@ fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, re
         2u8 => {
             *cur_index = 0;
             println!("Changing to file delta state");
-            let local_path = format!("{}/{}", SAVE_PATH, filepath);
+            let local_path = format!("{}/{}", save_path, file_path);
             println!("File: {}", local_path);
             let f = fs::File::open(&local_path).expect("Failed to open the file for deltas");
             *writer = Some(BufWriter::new(f));
@@ -67,7 +69,8 @@ fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, re
         }
     }
 }
-fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, cur_index: &mut u64, filepath: &String, filelength: &mut u64){
+
+fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, cur_index: &mut u64, file_path: &String, save_path : &String, filelength: &mut u64){
     // println!("{}",2u64.pow(cur_index as u32));
     *filelength += (b as u64) << 8 * *cur_index;
     *cur_index += 1;
@@ -76,7 +79,7 @@ fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<Fil
         println!("Changing to filedata state");
         *state = State::FileData;
         *cur_index = 0;
-        let local_path = format!("{}/{}", SAVE_PATH, filepath);
+        let local_path = format!("{}/{}", save_path, file_path);
         // if !fs::exists(&local_path).expect("Why would this ever error, error on fs exists") {
         //     fs::File::create(&local_path).expect(format!("Failed to create file that didn't exist {}", local_path).as_str());
         // }
@@ -84,6 +87,7 @@ fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<Fil
         *writer = Some(BufWriter::new(f));
     }
 }
+
 fn pull_u64(b: u8, state: &mut State, data: &mut u64, cur_index: &mut u64, next_state: State) {
     println!("{}",b);
     let shift_amount;
@@ -99,7 +103,8 @@ fn pull_u64(b: u8, state: &mut State, data: &mut u64, cur_index: &mut u64, next_
         *state = next_state;
     }
 }
-pub async fn processing(stream: &TcpStream) {
+
+pub async fn processing(stream: &TcpStream, save_path : &String) {
     println!("Accepted connection");
     // let mut stream = a.0;
     let mut state = State::Filepath;
@@ -134,10 +139,10 @@ pub async fn processing(stream: &TcpStream) {
                         filepath_state(b, &mut state, &mut filepath, i, size);
                     }
                     State::Flag => {
-                        flag_state(b, &mut state, &mut writer, &mut reader, &mut cur_index, i, size, &filepath);
+                        flag_state(b, &mut state, &mut writer, &mut reader, &mut cur_index, i, size, &filepath, save_path);
                     }
                     State::FileLength => {
-                        file_length_state(b, &mut state, &mut writer, &mut cur_index, &filepath, &mut filelength);
+                        file_length_state(b, &mut state, &mut writer, &mut cur_index, &filepath, save_path, &mut filelength);
                     }
                     State::FileData => {
                         // This one can't be a function easily because we don't know the size of the u8 array
@@ -178,14 +183,14 @@ pub async fn processing(stream: &TcpStream) {
                         if state == State::FileDeltaData {
                             // We have gotten the hash and now we compare it to the hash of the file we are testing against
                             let mut f;
-                            if !fs::exists(SAVE_PATH.to_string() + filepath.as_str()).expect("Failed to see if file exists") {
+                            if !fs::exists(save_path.to_string() + filepath.as_str()).expect("Failed to see if file exists") {
                                 // If the file doesn't exist we don't even have to begin checking the hash
                                 println!("File didn't exist");
                                 ask_for_file(&filepath, &stream);
                                 state = State::FileDeltaDataToss;
                                 break;
                             }
-                            f = fs::File::open(SAVE_PATH.to_string() + filepath.as_str()).expect("Failed to open file");
+                            f = fs::File::open(save_path.to_string() + filepath.as_str()).expect("Failed to open file");
                             let mut hash_buf: Vec<u8> = Vec::new();
                             f.read_to_end(&mut hash_buf).expect("Failed to read to end of file");
                             println!("{}", hash_buf.len());
@@ -200,7 +205,7 @@ pub async fn processing(stream: &TcpStream) {
                                 state = State::FileDeltaDataToss;
                             } else {
                                 hash = 0;
-                                let write_file = fs::File::create(format!("{}{}.temp", SAVE_PATH, filepath)).expect("Failed to create writable file");
+                                let write_file = fs::File::create(format!("{}{}.temp", save_path, filepath)).expect("Failed to create writable file");
                                 let mut w = BufWriter::new(write_file);
                                 // writer = Some(BufWriter::new(f));
                                 // Dont have to set the state again, the pull u64 got that for us
@@ -268,7 +273,7 @@ pub async fn processing(stream: &TcpStream) {
                             // Get the length of the reader file
                             println!("{}", filepath);
                             // let reader_size = reader.unwrap().into_inner().metadata().unwrap().len();
-                            let fsize = fs::File::open(format!("{}{}", SAVE_PATH, filepath)).unwrap().metadata().unwrap().len();
+                            let fsize = fs::File::open(format!("{}{}", save_path, filepath)).unwrap().metadata().unwrap().len();
                             println!("fsize: {}", fsize);
                             println!("End delta: {}", end_delta);
                             
@@ -290,7 +295,7 @@ pub async fn processing(stream: &TcpStream) {
                                 }
                             };
                             f.flush().expect("Failed to flush writer");
-                            fs::rename(format!("{}{}.temp", SAVE_PATH, filepath), format!("{}{}", SAVE_PATH, filepath)).expect("Failed to write to file");
+                            fs::rename(format!("{}{}.temp", save_path, filepath), format!("{}{}", save_path, filepath)).expect("Failed to write to file");
                             cur_index = 0;
                             println!("Finished delta file {}", filepath);
                             filepath = "".to_string();
