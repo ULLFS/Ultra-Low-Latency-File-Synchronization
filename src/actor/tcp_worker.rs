@@ -12,11 +12,6 @@ use tokio::net::TcpStream;
 
 const BUFFER_SIZE: usize = 4096;
 
-#[derive(Default,Clone,Debug,Eq,PartialEq)]
-pub(crate) struct TcpResponse {
-   pub data : Vec<u8>
-}
-
 //if no internal state is required (recommended) feel free to remove this.
 #[derive(Default)]
 pub(crate) struct TcpworkeractorInternalState {
@@ -63,7 +58,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
         match cmd.try_take(&mut _tcp_conn_config_rx){
             Some(msg) => {
-                println!("(tcp_worker) {:?}", msg);
+                println!("(tcp_worker) {}", msg.text);
                 cmd.relay_stats();
             }
             None => {
