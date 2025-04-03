@@ -64,7 +64,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
         match cmd.try_take(&mut _tcp_conn_config_rx){
             Some(msg) => {
-                //println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
+                println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
                 save_path = msg.text;
                 cmd.relay_stats();
             }

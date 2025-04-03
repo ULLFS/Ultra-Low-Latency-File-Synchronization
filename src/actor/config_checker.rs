@@ -7,7 +7,6 @@ use log::*;
 use steady_state::*;
 use tokio::sync::broadcast::error;
 use crate::Args;
-use core::slice;
 use std::error::Error;
 use tokio::time::{sleep, Duration};
 use crate::actor::tcp_worker::ConfigMsg;
@@ -45,7 +44,7 @@ async fn internal_behavior<C: SteadyCommander>(
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
-    let mut _buf = [0;10];
+    let mut _buf = [0;BUFFER_SIZE];
 
     //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut config_conn_tx = config_conn_tx.lock().await;
@@ -56,38 +55,18 @@ async fn internal_behavior<C: SteadyCommander>(
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
         // Retrieve the Filter instance to access configuration details
+        let filter = Filter::get_instance();
         
         // Get configuration details from the Filter instance
+        let watch_dir: &str = filter.get_watch_dir();
         
-        let watch_dir: &str = match Filter::get_instance() {
-            Ok(filter) => match filter.get_watch_dir() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    let _done = cmd.send_async(
-                        &mut error_conn_tx
-                        ,ErrorMessage { text: format!("{}", e) }
-                        ,SendSaturation::IgnoreAndWait
-                    );
-                    eprintln!("Error retrieving watch directory: {}", e);
-                    continue;
-                }
-            },
-            Err(e) => {
-                let _done = cmd.send_async(
-                        &mut error_conn_tx
-                        ,ErrorMessage { text: format!("{}", e) }
-                        ,SendSaturation::IgnoreAndWait
-                    );
-                eprintln!("Error initializing filter: {}", e);
-                continue;
-            }
-        };
-        
-        
+
         // send data through the channel to tcp_worker
         let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
 
         //sleep(Duration::from_secs(400)).await;
+
+        cmd.relay_stats();
 
     }
     Ok(())
