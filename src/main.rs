@@ -13,6 +13,7 @@ mod actor {
         pub mod config_checker;
         pub mod handle_client;
         pub mod file_filter;
+        pub mod error_logger;
 }
 
 fn main() {
