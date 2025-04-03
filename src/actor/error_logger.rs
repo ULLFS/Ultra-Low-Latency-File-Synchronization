@@ -5,14 +5,22 @@ use log::*;
 #[allow(unused_imports)]
 //use std::time::{Duration, SystemTime};
 use steady_state::*;
+use tokio::sync::broadcast::error;
 use crate::Args;
 use std::error::Error;
 use tokio::time::{sleep, Duration};
 use crate::actor::tcp_worker::ConfigMsg;
-use crate::actor::file_filter::Filter; // Import the Filter struct for connection details
+use crate::actor::file_filter::Filter;
+
+use super::tcp_listener; // Import the Filter struct for connection details
 //use std::io;
 
 const BUFFER_SIZE: usize = 4096;
+
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
+pub(crate) struct ErrorMessage {
+   pub(crate) text: String
+}
 
 //if no internal state is required (recommended) feel free to remove this.
 #[derive(Default)]
@@ -21,7 +29,9 @@ pub(crate) struct TcpworkeractorInternalState {
 
 
 pub async fn run(context: SteadyContext
-        ,config_conn_tx: SteadyTx<ConfigMsg>
+        , tcp_listener_rx: SteadyRx<ErrorMessage>
+        , tcp_worker_rx: SteadyRx<ErrorMessage>
+        , config_checker_rx: SteadyRx<ErrorMessage>
         , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
@@ -29,39 +39,55 @@ pub async fn run(context: SteadyContext
   let _cli_args = context.args::<Args>();
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-  let cmd =  into_monitor!(context, [],[config_conn_tx]);
-  internal_behavior(cmd,config_conn_tx,state).await
+  let cmd =  into_monitor!(context, [tcp_listener_rx, tcp_worker_rx, config_checker_rx],[]);
+  internal_behavior(cmd, tcp_listener_rx, tcp_worker_rx, config_checker_rx, state).await
 }
 
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
-    config_conn_tx: SteadyTx<ConfigMsg>,
+    tcp_listener_rx: SteadyRx<ErrorMessage>,
+    tcp_worker_rx: SteadyRx<ErrorMessage>,
+    config_checker_rx: SteadyRx<ErrorMessage>,
     _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut _buf = [0;BUFFER_SIZE];
 
     //let mut config_conn_rx = config_conn_rx.lock().await;
-    let mut config_conn_tx = config_conn_tx.lock().await;
+    let mut tcp_listener_rx = tcp_listener_rx.lock().await;
+    let mut tcp_worker_rx = tcp_worker_rx.lock().await;
+    let mut config_checker_rx = config_checker_rx.lock().await;
 
 
-    while cmd.is_running(&mut || config_conn_tx.mark_closed()) {
-        let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
+    while cmd.is_running(&mut || tcp_listener_rx.is_closed_and_empty() && tcp_worker_rx.is_closed_and_empty() && config_checker_rx.is_closed_and_empty()) {
+        let clean = await_for_all!(cmd.wait_avail(&mut tcp_listener_rx,5)
+                                        ,cmd.wait_avail(&mut tcp_worker_rx, 5)
+                                        ,cmd.wait_avail(&mut config_checker_rx, 5) );
 
-        // Retrieve the Filter instance to access configuration details
-        let filter = Filter::get_instance();
-        
-        // Get configuration details from the Filter instance
-        let watch_dir: &str = filter.get_watch_dir();
-        
+        match cmd.try_take(&mut tcp_listener_rx) {
+            Some(message) => {
+                println!("Error: {:?}", message);
+                cmd.relay_stats();
+            },
+            None => {
+                if clean {
+                    error!("internal error, should have found message");
+                }
+            }
+        }
 
-        // send data through the channel to tcp_worker
-        let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
-
-        sleep(Duration::from_secs(400)).await;
-
-        cmd.relay_stats();
+        match cmd.try_take(&mut config_checker_rx) {
+            Some(message) => {
+                print!("Error: {:?}", message);
+                cmd.relay_stats();
+            },
+            None => {
+                if clean {
+                    error!("internal error, should have found message");
+                }
+            }
+        }
 
     }
     Ok(())

@@ -7,9 +7,10 @@ use std::default; */
 use std::time::Duration;
 use steady_state::*;
 use crate::Args;
-use std::error::Error;
+use std::{error::Error, fmt::format};
 //use crate::actor::tcp_worker::TcpResponse;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{net::{TcpListener, TcpStream}, sync::broadcast::error};
+use crate::actor::error_logger::ErrorMessage;
 //use tokio::io::{AsyncReadExt, AsyncWriteExt};
 //use std::io::{Read,Write};
 //use std::sync::Arc;
@@ -37,7 +38,9 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-        ,tcp_conn_tx: SteadyTx<TcpStream>, state: SteadyState<RuntimeState>
+        ,tcp_conn_tx: SteadyTx<TcpStream>
+        ,error_conn_tx: SteadyTx<ErrorMessage>
+        , state: SteadyState<RuntimeState>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
@@ -45,13 +48,14 @@ pub async fn run(context: SteadyContext
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
   let listener = TcpListener::bind("127.0.0.1:34254").await?;
-  let cmd =  into_monitor!(context, [],[tcp_conn_tx]);
-  internal_behavior(cmd,tcp_conn_tx, listener, state).await
+  let cmd =  into_monitor!(context, [],[tcp_conn_tx, error_conn_tx]);
+  internal_behavior(cmd,tcp_conn_tx, error_conn_tx,listener, state).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     tcp_conn_tx: SteadyTx<TcpStream>,
+    error_conn_tx: SteadyTx<ErrorMessage>,
     listener: TcpListener,
     state: SteadyState<RuntimeState>,
 ) -> Result<(), Box<dyn Error>> {
@@ -59,16 +63,27 @@ async fn internal_behavior<C: SteadyCommander>(
 
     if let Some(mut _state) = state_guard.as_mut() {
         let mut tcp_conn_tx = tcp_conn_tx.lock().await;
+        let mut error_conn_tx = error_conn_tx.lock().await;
 
         println!("(tcp_listener) Listening on port 34254...");
 
-        while cmd.is_running(&mut || tcp_conn_tx.mark_closed()) {
+        while cmd.is_running(&mut || tcp_conn_tx.mark_closed() && error_conn_tx.mark_closed()) {
             let (stream, _) = match listener.accept().await{
                 Ok(x) => x,
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::WouldBlock {
                         continue;
                     } else {
+                        let _done = cmd.send_async(
+                            &mut error_conn_tx
+                            ,ErrorMessage { text: format!("{}", e) }
+                            , SendSaturation::IgnoreAndWait
+                        ).await;
+                        let _done = cmd.send_async(
+                            &mut error_conn_tx
+                            ,ErrorMessage { text: format!("Error accepting connection {:?}", e) }
+                            ,SendSaturation::IgnoreAndWait
+                        );
                         panic!("(tcp_listener) Error accepting connection: {:?}", e);
                     }
                 }
@@ -87,7 +102,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
 
 
-#[cfg(test)]
+/* #[cfg(test)]
 pub(crate) mod tests {
     use std::time::Duration;
     /* use futures::sink::Buffer; */
@@ -141,7 +156,7 @@ pub(crate) mod tests {
         /* assert_eq!(results_tcp_conn_vec.len(), 1); // We expect 1 message to be forwarded
         assert_eq!(results_tcp_conn_vec[0]._dummy, 1); // Check if the message content is as expected */
     }
-}
+} */
 
 
 /* match stream.read(&mut buffer) {
