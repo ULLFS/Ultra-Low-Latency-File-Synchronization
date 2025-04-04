@@ -22,9 +22,6 @@ enum State {
     FileDeltaDataToss,
     // FileDeltaHashEnd,
 }
-// use std::io::Write;
-
-//const SAVE_PATH: &str = "/home/trevor/Documents/TestDir3";
 
 fn ask_for_file(file: &String, _stream: &TcpStream){
     println!("Got the wrong hash for the file: {}", file);

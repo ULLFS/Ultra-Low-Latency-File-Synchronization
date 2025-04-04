@@ -22,17 +22,11 @@ pub(crate) struct ErrorMessage {
    pub(crate) text: String
 }
 
-//if no internal state is required (recommended) feel free to remove this.
-#[derive(Default)]
-pub(crate) struct TcpworkeractorInternalState {
-}
-
 
 pub async fn run(context: SteadyContext
         , tcp_listener_rx: SteadyRx<ErrorMessage>
         , tcp_worker_rx: SteadyRx<ErrorMessage>
         , config_checker_rx: SteadyRx<ErrorMessage>
-        , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
@@ -40,7 +34,7 @@ pub async fn run(context: SteadyContext
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
   let cmd =  into_monitor!(context, [tcp_listener_rx, tcp_worker_rx, config_checker_rx],[]);
-  internal_behavior(cmd, tcp_listener_rx, tcp_worker_rx, config_checker_rx, state).await
+  internal_behavior(cmd, tcp_listener_rx, tcp_worker_rx, config_checker_rx).await
 }
 
 
@@ -49,7 +43,6 @@ async fn internal_behavior<C: SteadyCommander>(
     tcp_listener_rx: SteadyRx<ErrorMessage>,
     tcp_worker_rx: SteadyRx<ErrorMessage>,
     config_checker_rx: SteadyRx<ErrorMessage>,
-    _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut _buf = [0;BUFFER_SIZE];
@@ -67,7 +60,19 @@ async fn internal_behavior<C: SteadyCommander>(
 
         match cmd.try_take(&mut tcp_listener_rx) {
             Some(message) => {
-                println!("Error: {:?}", message);
+                error!("Error: {:?}", message);
+                cmd.relay_stats();
+            },
+            None => {
+                if clean {
+                    error!("internal error, should have found message");
+                }
+            }
+        }
+
+        match cmd.try_take(&mut tcp_worker_rx) {
+            Some(message) => {
+                error!("Error: {:?}", message);
                 cmd.relay_stats();
             },
             None => {
@@ -79,7 +84,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
         match cmd.try_take(&mut config_checker_rx) {
             Some(message) => {
-                print!("Error: {:?}", message);
+                error!("Error: {:?}", message);
                 cmd.relay_stats();
             },
             None => {

@@ -1,4 +1,5 @@
 
+use std::cmp::{PartialEq, PartialOrd};
 #[allow(unused_imports)]
 use log::*;
 /* use tokio::runtime::Runtime;
@@ -8,12 +9,8 @@ use std::time::Duration;
 use steady_state::*;
 use crate::Args;
 use std::{error::Error, fmt::format};
-//use crate::actor::tcp_worker::TcpResponse;
 use tokio::{net::{TcpListener, TcpStream}, sync::broadcast::error};
 use crate::actor::error_logger::ErrorMessage;
-//use tokio::io::{AsyncReadExt, AsyncWriteExt};
-//use std::io::{Read,Write};
-//use std::sync::Arc;
 
 const BATCH_SIZE: usize = 7000;
 
@@ -59,25 +56,49 @@ async fn internal_behavior<C: SteadyCommander>(
     listener: TcpListener,
     state: SteadyState<RuntimeState>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
+    //let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
 
-    if let Some(mut _state) = state_guard.as_mut() {
+    //let mut state = state.lock(|| RuntimeState::new(1)).await;
+    let mut state = state.lock().await;
+
+    //if let Some(mut _state) = state_guard.as_mut() {
         let mut tcp_conn_tx = tcp_conn_tx.lock().await;
         let mut error_conn_tx = error_conn_tx.lock().await;
 
+        /* if state.value > 1 {
+            let _ = cmd
+                .send_async(
+                    &mut error_conn_tx,
+                    ErrorMessage {
+                        text: format!("at value: {}", state.value),
+                    },
+                    SendSaturation::IgnoreAndWait,
+                )
+                .await;
+        } */
+
         println!("(tcp_listener) Listening on port 34254...");
 
+        let tcp_vacant_block = BATCH_SIZE.min(tcp_conn_tx.capacity());
+        let err_vacant_block = BATCH_SIZE.min(error_conn_tx.capacity());
+
         while cmd.is_running(&mut || tcp_conn_tx.mark_closed() && error_conn_tx.mark_closed()) {
+
+            let _clean = await_for_all!(
+                cmd.wait_vacant(&mut tcp_conn_tx, tcp_vacant_block),
+                cmd.wait_vacant(&mut error_conn_tx, err_vacant_block)
+            );
+
             let (stream, _) = match listener.accept().await{
                 Ok(x) => x,
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::WouldBlock {
-                        continue;
+                        continue;   
                     } else {
                         let _done = cmd.send_async(
                             &mut error_conn_tx
                             ,ErrorMessage { text: format!("{}", e) }
-                            , SendSaturation::IgnoreAndWait
+                            , SendSaturation::IgnoreAndWait 
                         ).await;
                         let _done = cmd.send_async(
                             &mut error_conn_tx
@@ -93,9 +114,9 @@ async fn internal_behavior<C: SteadyCommander>(
             let _done = cmd.send_async(&mut tcp_conn_tx, stream, SendSaturation::IgnoreAndWait).await;
         }
             
-    } else {
-        warn!("missing state, unable to start actor");
-    }
+    //} else {
+    //    warn!("missing state, unable to start actor");
+    //}
     Ok(())
 }
 

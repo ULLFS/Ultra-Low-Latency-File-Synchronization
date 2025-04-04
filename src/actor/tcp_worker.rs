@@ -7,16 +7,10 @@ use std::time::Duration;
 use steady_state::*;
 use crate::{actor::handle_client, Args};
 use std::error::Error;
-use tokio::{net::TcpStream, sync::broadcast::error};
+use tokio::net::TcpStream;
 use crate::actor::error_logger::ErrorMessage;
-//use std::io;
 
 const BUFFER_SIZE: usize = 4096;
-
-//if no internal state is required (recommended) feel free to remove this.
-#[derive(Default)]
-pub(crate) struct TcpworkeractorInternalState {
-}
 
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
 pub(crate) struct  ConfigMsg{
@@ -28,7 +22,6 @@ pub async fn run(context: SteadyContext
         ,error_conn_tx: SteadyTx<ErrorMessage>
         ,tcp_conn_rx: SteadyRx<TcpStream>
         ,tcp_conn_config_rx: SteadyRx<ConfigMsg>
-        , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
@@ -36,35 +29,33 @@ pub async fn run(context: SteadyContext
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
   let cmd =  into_monitor!(context, [&tcp_conn_rx, &tcp_conn_config_rx],[error_conn_tx]);
-  internal_behavior(cmd,error_conn_tx,tcp_conn_rx, tcp_conn_config_rx, state).await
+  internal_behavior(cmd,error_conn_tx,tcp_conn_rx, tcp_conn_config_rx).await
 }
 
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     error_conn_tx: SteadyTx<ErrorMessage>,
     tcp_conn_rx: SteadyRx<TcpStream>,
-    _tcp_conn_config_rx: SteadyRx<ConfigMsg>,
-    _state: SteadyState<TcpworkeractorInternalState>,
+    tcp_conn_config_rx: SteadyRx<ConfigMsg>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut buf = [0;BUFFER_SIZE];
 
     let mut error_conn_tx = error_conn_tx.lock().await;
     let mut tcp_conn_rx = tcp_conn_rx.lock().await;
-    let mut _tcp_conn_config_rx = _tcp_conn_config_rx.lock().await;
+    let mut tcp_conn_config_rx = tcp_conn_config_rx.lock().await;
 
     let mut save_path : String;
 
-    while cmd.is_running(&mut || error_conn_tx.mark_closed() && tcp_conn_rx.is_closed_and_empty() && _tcp_conn_config_rx.is_closed_and_empty()) {
+    while cmd.is_running(&mut || error_conn_tx.mark_closed() && tcp_conn_rx.is_closed_and_empty() && tcp_conn_config_rx.is_closed_and_empty()) {
         //let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
-
-        // I need to ask Nathan a question about what the count should be. 
+ 
         let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1)
-                                        ,cmd.wait_avail(&mut _tcp_conn_config_rx,1)); // count: The number of units to wait for
+                                        ,cmd.wait_avail(&mut tcp_conn_config_rx,1));
 
-        match cmd.try_take(&mut _tcp_conn_config_rx){
+        match cmd.try_take(&mut tcp_conn_config_rx){
             Some(msg) => {
-                println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
+                //println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
                 save_path = msg.text;
                 cmd.relay_stats();
             }
@@ -77,9 +68,6 @@ async fn internal_behavior<C: SteadyCommander>(
             Some(stream) => {
                 println!("(tcp_worker) Successfully forwarded connection from tcp_listener to tcp_worker.");
                 println!("(tcp_worker) New client's address: {:?}", stream.peer_addr()?);
-                //let mut std_tcp_stream = stream.into_std()?;
-                /* std_tcp_stream.set_nonblocking(false)?;
-                std_tcp_stream.read_exact(&mut buf)? */
                 loop {
                     let _ = handle_client::processing(&stream, &save_path);
                     cmd.relay_stats();

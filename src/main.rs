@@ -3,7 +3,7 @@ use structopt::StructOpt;
 #[allow(unused_imports)]
 use log::*;
 use crate::args::Args;
-use std::{thread::Thread, time::Duration};
+use std::time::Duration;
 use steady_state::*;
 
 mod actor {
@@ -96,37 +96,34 @@ fn build_graph(mut graph: Graph) -> Graph {
     }
 
     {
-     let state = new_state();
-    
+
      base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
                                             , tcpworker_error_conn_tx.clone()
                                             , tcpworkeractor_tcp_conn_rx.clone()
                                             ,tcpworker_str_conn_rx.clone()
-                                            , state.clone() )
+                                            )
                   , &mut Threading::Spawn );
     }
 
     {
-        let state = new_state();
 
         base_actor_builder.with_name("Config Checker")
                     .build(move |context| actor::config_checker::run(context
                                                ,configchecker_str_conn_tx.clone()
                                                ,configchecker_error_conn_tx.clone()
-                                               ,state.clone())
+                                               )
                     , &mut Threading::Spawn );
     }
 
     {
-        let state = new_state();
 
         base_actor_builder.with_name("Error Logger")
                     .build(move |context| actor::error_logger::run(context
                                                 ,errorlogger_listener_rx.clone()
                                                 ,errorlogger_worker_rx.clone()
                                                 ,errorlogger_config_rx.clone()
-                                                ,state.clone())
+                                                )
                     , &mut Threading::Spawn);
     }
 

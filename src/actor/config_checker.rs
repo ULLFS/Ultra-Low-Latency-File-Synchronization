@@ -1,31 +1,18 @@
-
 #[allow(unused_imports)]
 use log::*;
-//use crate::actor::tcp_listener::TcpMessage;
 #[allow(unused_imports)]
-//use std::time::{Duration, SystemTime};
 use steady_state::*;
-use tokio::sync::broadcast::error;
 use crate::Args;
 use std::error::Error;
-use tokio::time::{sleep, Duration};
 use crate::actor::tcp_worker::ConfigMsg;
-use crate::actor::file_filter::Filter; // Import the Filter struct for connection details
+use crate::actor::file_filter::Filter;
 use crate::actor::error_logger::ErrorMessage;
-//use std::io;
 
 const BUFFER_SIZE: usize = 4096;
-
-//if no internal state is required (recommended) feel free to remove this.
-#[derive(Default)]
-pub(crate) struct TcpworkeractorInternalState {
-}
-
 
 pub async fn run(context: SteadyContext
         ,config_conn_tx: SteadyTx<ConfigMsg>
         ,error_conn_tx: SteadyTx<ErrorMessage>
-        , state: SteadyState<TcpworkeractorInternalState>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
@@ -33,7 +20,7 @@ pub async fn run(context: SteadyContext
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
   let cmd =  into_monitor!(context, [],[config_conn_tx, error_conn_tx]);
-  internal_behavior(cmd,config_conn_tx,error_conn_tx,state).await
+  internal_behavior(cmd,config_conn_tx,error_conn_tx).await
 }
 
 
@@ -41,7 +28,6 @@ async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     config_conn_tx: SteadyTx<ConfigMsg>,
     error_conn_tx: SteadyTx<ErrorMessage>,
-    _state: SteadyState<TcpworkeractorInternalState>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut _buf = [0;BUFFER_SIZE];
@@ -55,10 +41,33 @@ async fn internal_behavior<C: SteadyCommander>(
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
         // Retrieve the Filter instance to access configuration details
-        let filter = Filter::get_instance();
+        //let filter = Filter::get_instance();
+
+        let watch_dir: &str = match Filter::get_instance(){
+            Ok(filter) => match filter.get_watch_dir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    let _ = cmd.send_async(&mut error_conn_tx
+                        , ErrorMessage {text: format!("{}", e)}
+                        , SendSaturation::IgnoreAndWait
+                    ).await;
+                    cmd.relay_stats();
+                    continue;
+                }
+                
+            },
+            Err(e) => {
+                let _ = cmd.send_async(&mut error_conn_tx
+                    , ErrorMessage { text: format!("{}", e) }
+                    , SendSaturation::IgnoreAndWait
+                );
+                cmd.relay_stats();
+                continue;
+            }
+        };
         
         // Get configuration details from the Filter instance
-        let watch_dir: &str = filter.get_watch_dir();
+        //let watch_dir: &str = filter.get_watch_dir();
         
 
         // send data through the channel to tcp_worker
@@ -66,7 +75,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
         //sleep(Duration::from_secs(400)).await;
 
-        cmd.relay_stats();
+        //cmd.relay_stats();
 
     }
     Ok(())
