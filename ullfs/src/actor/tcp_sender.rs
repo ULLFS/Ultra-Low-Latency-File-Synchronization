@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, sync::{Arc, Mutex}};
 use steady_state::*;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
-use crate::{client_tcp, fileDifs};
+use crate::{client_tcp, fileDifs,Args};
 
 use super::ebpf_listener::RuntimeState;
 async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
@@ -22,7 +22,12 @@ async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
 //     read_streams(vec_tcp_streams, cmd, map_filenames, conn_tx).await;
 // }
 
-async fn read_streams(streams: &mut Vec<(TcpStream, String)>, cmd: &mut LocalMonitor<2, 1>, map_filenames: &mut HashMap<String, String>, conn_tx: &mut futures_util::lock::MutexGuard<'_, Tx<Box<String>>>){
+async fn read_streams <C: SteadyCommander>(
+    streams: &mut Vec<(TcpStream, String)>,
+    cmd: &mut C,
+    map_filenames: &mut HashMap<String, String>,
+    conn_tx: &mut futures_util::lock::MutexGuard<'_,Tx<Box<String>>>){
+        
     // let mut vec_streams_temp: Vec<(TcpStream, String)> = Vec::new();
     let mut vec_disconnected: Vec<String> = Vec::new();
     for (stream, name) in streams.iter_mut() {
@@ -70,27 +75,46 @@ async fn read_streams(streams: &mut Vec<(TcpStream, String)>, cmd: &mut LocalMon
     });
     // return streams;
 }
-pub async fn run(context: SteadyContext, 
+
+pub async fn run(context: SteadyContext,
     ebpf_receiver: SteadyRx<Box<String>>,
     tcp_receiver: SteadyRx<Vec<(TcpStream, String)>>,
     connection_handler_sender: SteadyTx<Box<String>>,
-    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>> {
+    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
+        
+    // if needed CLI Args can be pulled into state from _cli_args
+    let _cli_args = context.args::<Args>();
+    // monitor consumes context and ensures all the traffic on the chosen channels is monitored
+    // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
+    let cmd =  into_monitor!(context, [connection_handler_sender],[ebpf_receiver,tcp_receiver]);
+    internal_behavior(cmd, ebpf_receiver,tcp_receiver,connection_handler_sender,state).await
+
+}
+
+async fn internal_behavior <C: SteadyCommander>(
+    mut cmd: C, 
+    ebpf_receiver: SteadyRx<Box<String>>,
+    tcp_receiver: SteadyRx<Vec<(TcpStream, String)>>,
+    connection_handler_sender: SteadyTx<Box<String>>,
+    state: SteadyState<RuntimeState>,
+) -> Result<(),Box<dyn Error>> {
     //Expects received data to be in the following format:
     // Send_type\0Filepath
     // Send Type can be FULL_FILE, CREATE_DIRECTORY, RENAME_DIR, RENAME_FILE,
     // DELTA_FILE, DELETE_FILE, DELETE_DIR, AUTO_FILE
     // More to come possibly
     // AUTO_FILE specifically will automatically determine whether to send a delta file or full file
-    let mut cmd = into_monitor!(context, [ebpf_receiver, tcp_receiver], [connection_handler_sender]);
+    //let mut cmd = into_monitor!(context, [ebpf_receiver, tcp_receiver], [connection_handler_sender]);
+    
     let mut ebpf_rx = ebpf_receiver.lock().await;
     let mut tcp_rx = tcp_receiver.lock().await;
     let mut conn_tx = connection_handler_sender.lock().await;
+
+
     let mut map_filenames: HashMap<String, String> = HashMap::new();
     let mut vec_tcp_streams: Vec<(TcpStream, String)> = Vec::new();
 
-    while cmd.is_running(&mut || {
-        ebpf_rx.is_closed_and_empty() && tcp_rx.is_closed_and_empty() && conn_tx.mark_closed()
-    }) {
+    while cmd.is_running(&mut || ebpf_rx.is_closed_and_empty() && tcp_rx.is_closed_and_empty() && conn_tx.mark_closed()) {
 
         match cmd.try_take(&mut tcp_rx) {
             Some(x) => {

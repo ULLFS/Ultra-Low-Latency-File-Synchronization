@@ -9,6 +9,7 @@ use std::default; */
 #[allow(unused_imports)]
 use std::time::Duration;
 use steady_state::*;
+use crate::Args;
 
 // use crate::Args;
 use std::{error::Error, fs, io::BufReader, process, sync::{Arc}};
@@ -40,26 +41,26 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-    ,transmitter: SteadyTx<Box<String>>
-    ,state: SteadyState<RuntimeState>
-) -> Result<(),Box<dyn Error>> {
-    // let mut cmd_list = Vec::new();
-    // for transmitter in &transmitter_list {
-    //     let cmd =  into_monitor!(context.clone(), [],[transmitter]);
-    //     // internal_behavior(cmd, transmitter, state).await
-    //     cmd_list.push(cmd);
+        ,transmitter: SteadyTx<Box<String>>
+        ,state: SteadyState<RuntimeState>
+    ) -> Result<(),Box<dyn Error>> {
 
-    // }
-    internal_behavior(context, transmitter, state).await
+    // if needed CLI Args can be pulled into state from _cli_args
+    let _cli_args = context.args::<Args>();
+
+    // monitor consumes context and ensures all the traffic on the chosen channels is monitored
+    // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
+    let cmd = into_monitor!(context, [], [transmitter]);
+    internal_behavior(cmd, transmitter,state).await
 
 }
 
-async fn internal_behavior(context: SteadyContext, 
+async fn internal_behavior <C: SteadyCommander>(
+    mut cmd: C, 
     transmitter: SteadyTx<Box<String>>,
-    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
+    state: SteadyState<RuntimeState>,
+) -> Result<(),Box<dyn Error>> {
     let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
-
-    let mut cmd =  into_monitor!(context, [],[transmitter]);
 
     if let Some(mut _state) = state_guard.as_mut() {
         // let mut tcp_msg_rx = tcp_msg_rx.lock().await;

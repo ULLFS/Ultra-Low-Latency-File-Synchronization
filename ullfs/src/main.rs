@@ -16,16 +16,15 @@ pub mod createPacket;
 pub mod fileDifs;
 pub mod hashFileDif;
 pub mod client_tcp;
+pub mod ebpf_setup;
+
 mod actor {
     
         pub mod ebpf_listener;
         pub mod ram_cleaner;
         pub mod tcp_sender;
         pub mod connection_handler;
-        // pub mod tcp_worker;
-        // pub mod handle_client;
 }
-pub mod ebpf_setup;
 
 fn main() {
     let opt = Args::from_args();
@@ -33,7 +32,7 @@ fn main() {
     let service_executable_name = "ullfs";
     let service_user = "ullfs_user";
     let systemd_command = SystemdBuilder::process_systemd_commands(  opt.systemd_action()
-                                                   , opt.to_cli_string(service_executable_name).as_str()
+                                                   , service_executable_name
                                                    , service_user);
 
     if !systemd_command {
@@ -53,28 +52,37 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     //this common root of the channel builder allows for common config of all channels
     let base_channel_builder = graph.channel_builder()
-        .with_type()
-        .with_line_expansion(1.0f32);
+        .with_filled_trigger(Trigger::AvgAbove(Filled::p90()), AlertColor::Red)
+        .with_filled_trigger(Trigger::AvgAbove(Filled::percentage(75.00f32).expect("internal range error")), AlertColor::Orange)
+        .with_filled_trigger(Trigger::AvgAbove(Filled::p50()), AlertColor::Yellow)
+        .with_line_expansion(0.0001f32)
+        .with_type();
 
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
-        .with_mcpu_percentile(Percentile::p80())
-        .with_load_percentile(Percentile::p80());
+        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m256()), AlertColor::Yellow)
+        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
+        .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
+        .with_thread_info()
+        .with_mcpu_avg()
+        .with_load_avg();
 
     //build channels
-    //{Index, Value, Flags}
-    // let t = tokio::signal::ctrl_c().await;
-    // println!("Exiting");
-    
+    let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder
+            .with_capacity(1024)
+            .build();
+
+        let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder
+            .with_capacity(1024)
+            .build();
+
+        let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder
+            .with_capacity(1024)
+            .build();
+   
     //build actors
     
     {
-        
-
-        let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
-        let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder.build();
-
-        let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder.build();
         // Detects all changes in the file system thanks to eBPF.
         // This thing was annoying to build
         let state = new_state();
@@ -84,6 +92,10 @@ fn build_graph(mut graph: Graph) -> Graph {
                                             , ebpf_listener_conn_tx.clone()
                                             , state.clone())
                   , &mut Threading::Spawn );
+
+    }
+
+    {
         // Cleans the ram on a timeout, every minute looping through each of our files stored in ram
         // To see if we need to clean 
         let state = new_state();
@@ -91,6 +103,10 @@ fn build_graph(mut graph: Graph) -> Graph {
                     .build(move | context | actor::ram_cleaner::run(context,
                                              state.clone())
                     ,&mut Threading::Spawn);
+
+    }
+
+    {
         // Sends data over TCP. Just tell it what file to send and it should handle it from there
         let state = new_state();
         base_actor_builder.with_name("TCPSenderActor")
@@ -98,17 +114,20 @@ fn build_graph(mut graph: Graph) -> Graph {
                             ebpf_listener_conn_rx.clone(), 
                             tcp_listener_conn_rx.clone(),
                             connection_handler_conn_tx.clone(),
-                            state.clone()),
-                    &mut Threading::Spawn);
+                            state.clone())
+                    ,&mut Threading::Spawn);
+
+    }
+
+    {
         // Listens over TCP, will handle reconnecting when connections are lost and full file transmission in case of error
         let state = new_state();
         base_actor_builder.with_name("Connectionhandler")
                             .build(move | context | actor::connection_handler::run(context, 
                                 tcp_listener_conn_tx.clone(),
                                 connection_handler_conn_rx.clone(),
-                                state.clone()),
-                            
-                            &mut Threading::Spawn);
+                                state.clone())
+                    ,&mut Threading::Spawn);
         
     }
     

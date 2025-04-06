@@ -3,11 +3,13 @@ use std::{collections::HashMap, error::Error, fs, io::BufReader, ops::Index, tim
 use serde_json::Value;
 use steady_state::*;
 use tokio::{net::{unix::SocketAddr, TcpSocket, TcpStream}, time::{timeout, sleep}};
+use crate::Args;
 
 use super::ebpf_listener::RuntimeState;
 fn resend_data(input_data: Vec<u8>){
 
 }
+
 fn get_connection_addresses() -> (Vec<String>, String){
     println!("Checking connections config");
     let conf_file : fs::File = match fs::File::open("./config.json"){
@@ -32,6 +34,7 @@ fn get_connection_addresses() -> (Vec<String>, String){
     }).collect();
     return (addresses_string, port);
 }
+
 async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disconnected: &Vec<String>) -> Vec<String>{
     let (mut addresses_string, port) = get_connection_addresses();
     tcpstreams.retain(| (stream, address)| {
@@ -92,6 +95,70 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
 
 
 }
+
+
+pub async fn run(context: SteadyContext
+    , transmitter: SteadyTx<Vec<(TcpStream, String)>>
+    , receiver: SteadyRx<Box<String>>
+    , state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>> {
+
+    // if needed CLI Args can be pulled into state from _cli_args
+    let _cli_args = context.args::<Args>();
+    // monitor consumes context and ensures all the traffic on the chosen channels is monitored
+    // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
+    let cmd =  into_monitor!(context, [receiver],[transmitter]);
+    internal_behavior(cmd,transmitter,receiver,state).await
+
+}
+
+async fn internal_behavior <C: SteadyCommander>(
+    mut cmd: C, 
+    transmitter: SteadyTx<Vec<(TcpStream, String)>>,
+    receiver: SteadyRx<Box<String>>,
+    state: SteadyState<RuntimeState>
+) -> Result<(),Box<dyn Error>> {
+    
+    let mut file_to_resend: HashMap<String, String> = HashMap::new();
+
+    let mut tx = transmitter.lock().await;
+    let mut rx = receiver.lock().await;
+
+    // Disconnected addresses should start as all of them
+    let (mut disconnected, _) = get_connection_addresses();
+    
+    while cmd.is_running(&mut || tx.mark_closed() && rx.is_closed_and_empty()) {
+        // let recheck_connections = poll_connections(&mut connections, &mut file_to_resend).await;
+        // if recheck_connections {
+        // let mut connections_clone = Vec::new();
+        // for (connection, name) in connections{
+        //     connections_clone.push((connection.clone(), name));
+        // }
+        let mut connections = Vec::new();
+
+        disconnected = check_connections_config(&mut connections, &disconnected).await;
+        // Sends over all new connections that should be held
+        let _ = cmd.send_async(&mut tx, connections, SendSaturation::IgnoreAndWait).await;
+        cmd.relay_stats();
+        
+        // As long as there is something to read, keep reading
+        loop {
+            match cmd.try_take(&mut rx) {
+                Some(x) => {
+                    // if we have disconnected, add it to the list
+                    disconnected.push(x.to_string());
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+        
+        sleep(Duration::from_secs(300)).await;
+        // }
+    }
+    Ok(())
+}
+
 // async fn poll_connections(connections:&mut Vec<(TcpStream, String)>, file_to_resend: &mut HashMap<String, String>) -> bool {
 //     let mut recheck_connections = false;
 //     for (stream, address) in connections.iter_mut() {
@@ -131,48 +198,3 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
 //     }
 //     recheck_connections
 // }
-pub async fn run(context: SteadyContext, 
-    transmitter: SteadyTx<Vec<(TcpStream, String)>>,
-    receiver: SteadyRx<Box<String>>,
-    state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>> {
-    
-    let mut cmd = into_monitor!(context, [], [transmitter]);
-    let mut file_to_resend: HashMap<String, String> = HashMap::new();
-    let mut tx = transmitter.lock().await;
-    let mut rx = receiver.lock().await;
-    // Disconnected addresses should start as all of them
-    let (mut disconnected, _) = get_connection_addresses();
-    
-    while cmd.is_running(&mut | | {
-        tx.mark_closed() && rx.is_closed_and_empty()
-    }) {
-        // let recheck_connections = poll_connections(&mut connections, &mut file_to_resend).await;
-        // if recheck_connections {
-        // let mut connections_clone = Vec::new();
-        // for (connection, name) in connections{
-        //     connections_clone.push((connection.clone(), name));
-        // }
-        let mut connections = Vec::new();
-
-        disconnected = check_connections_config(&mut connections, &disconnected).await;
-        // Sends over all new connections that should be held
-        cmd.send_async(&mut tx, connections, SendSaturation::IgnoreAndWait).await;
-        
-        // As long as there is something to read, keep reading
-        loop {
-            match cmd.try_take(&mut rx) {
-                Some(x) => {
-                    // if we have disconnected, add it to the list
-                    disconnected.push(x.to_string());
-                }
-                None => {
-                    break;
-                }
-            }
-        }
-        
-        sleep(Duration::from_secs(300)).await;
-        // }
-    }
-    Ok(())
-}
