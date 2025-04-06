@@ -56,7 +56,7 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
         .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
         .with_thread_info()
-        .with_mcpu_avg() //0.041 % does this value need to be mutiplied by 100 so would this be equivalent to 4.1% or is this 41-thousandths
+        .with_mcpu_avg()
         .with_load_avg();
 
 
@@ -85,6 +85,7 @@ fn build_graph(mut graph: Graph) -> Graph {
     //build actors
     
     {
+
      let state = new_state();
     
      base_actor_builder.with_name("Tcp Listener")
@@ -93,8 +94,10 @@ fn build_graph(mut graph: Graph) -> Graph {
                                             , tcplisteneractor_error_conn_tx.clone()
                                             , state.clone() )
                   , &mut Threading::Spawn );
+
     }
 
+    
     {
 
      base_actor_builder.with_name("Tcp Worker")
@@ -104,7 +107,9 @@ fn build_graph(mut graph: Graph) -> Graph {
                                             ,tcpworker_str_conn_rx.clone()
                                             )
                   , &mut Threading::Spawn );
+        
     }
+    
 
     {
 
@@ -113,8 +118,10 @@ fn build_graph(mut graph: Graph) -> Graph {
                                                ,configchecker_str_conn_tx.clone()
                                                ,configchecker_error_conn_tx.clone()
                                                )
-                    , &mut Threading::Spawn );
+                    ,&mut Threading::Spawn );
+    
     }
+
 
     {
 

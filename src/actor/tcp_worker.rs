@@ -9,6 +9,7 @@ use crate::{actor::handle_client, Args};
 use std::error::Error;
 use tokio::net::TcpStream;
 use crate::actor::error_logger::ErrorMessage;
+use tokio::time::sleep;
 
 const BUFFER_SIZE: usize = 4096;
 
@@ -50,12 +51,15 @@ async fn internal_behavior<C: SteadyCommander>(
     while cmd.is_running(&mut || error_conn_tx.mark_closed() && tcp_conn_rx.is_closed_and_empty() && tcp_conn_config_rx.is_closed_and_empty()) {
         //let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
  
-        let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1)
-                                        ,cmd.wait_avail(&mut tcp_conn_config_rx,1));
+        /* let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1) */
+                                        /* ,cmd.wait_avail(&mut tcp_conn_config_rx,1) );*/
+
+        println!("(tcp_worker) hello");
+        //sleep(Duration::from_secs(1)).await;
 
         match cmd.try_take(&mut tcp_conn_config_rx){
             Some(msg) => {
-                //println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
+                println!("(tcp_worker) current watch_dir according to config_checker: {}", msg.text);
                 save_path = msg.text;
                 cmd.relay_stats();
             }
@@ -69,14 +73,14 @@ async fn internal_behavior<C: SteadyCommander>(
                 println!("(tcp_worker) Successfully forwarded connection from tcp_listener to tcp_worker.");
                 println!("(tcp_worker) New client's address: {:?}", stream.peer_addr()?);
                 loop {
-                    let _ = handle_client::processing(&stream, &save_path);
+                    let _ = handle_client::processing(&stream, &save_path).await;
                     cmd.relay_stats();
                 }
             },
             None => {
-                if clean {
+                /* if clean {
                     error!("internal error, should have found message");
-                }
+                } */
             }
         };
     }

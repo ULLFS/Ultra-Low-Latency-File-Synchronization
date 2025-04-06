@@ -2,11 +2,16 @@
 use log::*;
 #[allow(unused_imports)]
 use steady_state::*;
+use tokio::runtime::Runtime;
 use crate::Args;
 use std::error::Error;
 use crate::actor::tcp_worker::ConfigMsg;
 use crate::actor::file_filter::Filter;
 use crate::actor::error_logger::ErrorMessage;
+use std::time::Duration;
+use tokio::time::sleep;
+
+use super::tcp_listener::RuntimeState;
 
 const BUFFER_SIZE: usize = 4096;
 
@@ -24,7 +29,7 @@ pub async fn run(context: SteadyContext
 }
 
 
-async fn internal_behavior<C: SteadyCommander>(
+async fn internal_behavior <C: SteadyCommander>(
     mut cmd: C,
     config_conn_tx: SteadyTx<ConfigMsg>,
     error_conn_tx: SteadyTx<ErrorMessage>,
@@ -32,17 +37,15 @@ async fn internal_behavior<C: SteadyCommander>(
 
     let mut _buf = [0;BUFFER_SIZE];
 
-    //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut config_conn_tx = config_conn_tx.lock().await;
     let mut error_conn_tx = error_conn_tx.lock().await;
 
 
-    while cmd.is_running(&mut || config_conn_tx.mark_closed() && error_conn_tx.mark_closed()) {
+    while cmd.is_running(&mut || config_conn_tx.mark_closed() &&  error_conn_tx.mark_closed()) {
+        
         let _clean = await_for_all!(cmd.wait_vacant(&mut config_conn_tx, BUFFER_SIZE));
 
-        // Retrieve the Filter instance to access configuration details
-        //let filter = Filter::get_instance();
-
+        // Get configuration details from the Filter instance
         let watch_dir: &str = match Filter::get_instance(){
             Ok(filter) => match filter.get_watch_dir() {
                 Ok(dir) => dir,
@@ -66,16 +69,13 @@ async fn internal_behavior<C: SteadyCommander>(
             }
         };
         
-        // Get configuration details from the Filter instance
-        //let watch_dir: &str = filter.get_watch_dir();
-        
 
         // send data through the channel to tcp_worker
         let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
+        cmd.relay_stats();
 
-        //sleep(Duration::from_secs(400)).await;
-
-        //cmd.relay_stats();
+        println!("(config_checker) this message should output every 15 seconds!!!");
+        sleep(Duration::from_secs(15)).await;
 
     }
     Ok(())
