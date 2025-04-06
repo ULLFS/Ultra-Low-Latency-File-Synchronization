@@ -1,11 +1,10 @@
 use std::{collections::HashMap, error::Error, fs, io::BufReader, ops::Index, time::Duration};
-
 use serde_json::Value;
 use steady_state::*;
 use tokio::{net::{unix::SocketAddr, TcpSocket, TcpStream}, time::{timeout, sleep}};
 use crate::Args;
-
 use super::ebpf_listener::RuntimeState;
+
 fn resend_data(input_data: Vec<u8>){
 
 }
@@ -96,7 +95,6 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
 
 }
 
-
 pub async fn run(context: SteadyContext
     , transmitter: SteadyTx<Vec<(TcpStream, String)>>
     , receiver: SteadyRx<Box<String>>
@@ -133,9 +131,11 @@ async fn internal_behavior <C: SteadyCommander>(
         // for (connection, name) in connections{
         //     connections_clone.push((connection.clone(), name));
         // }
+
         let mut connections = Vec::new();
 
         disconnected = check_connections_config(&mut connections, &disconnected).await;
+
         // Sends over all new connections that should be held
         let _ = cmd.send_async(&mut tx, connections, SendSaturation::IgnoreAndWait).await;
         cmd.relay_stats();

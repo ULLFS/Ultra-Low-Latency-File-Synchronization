@@ -1,26 +1,13 @@
 use std::{collections::HashMap, error::Error, sync::{Arc, Mutex}};
-
 use steady_state::*;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
-
 use crate::{client_tcp, fileDifs,Args};
-
 use super::ebpf_listener::RuntimeState;
+
 async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
     println!("Resending File: {} to address: {}", file, name);
     client_tcp::write_full_file_to_connection(file, stream).await;
-    
-
-
 }
-// async fn read_streams_wrapper(
-//     vec_tcp_streams: &mut Vec<(TcpStream, String)>,
-//     cmd: &mut LocalMonitor<2,1>,
-//     map_filenames: &mut HashMap<String, String>,
-//     conn_tx: &mut futures_util::lock::MutexGuard<'_, Tx<Box<String>>>,
-// ) {
-//     read_streams(vec_tcp_streams, cmd, map_filenames, conn_tx).await;
-// }
 
 async fn read_streams <C: SteadyCommander>(
     streams: &mut Vec<(TcpStream, String)>,
@@ -154,3 +141,13 @@ async fn internal_behavior <C: SteadyCommander>(
 
     Ok(())
 }
+
+
+// async fn read_streams_wrapper(
+//     vec_tcp_streams: &mut Vec<(TcpStream, String)>,
+//     cmd: &mut LocalMonitor<2,1>,
+//     map_filenames: &mut HashMap<String, String>,
+//     conn_tx: &mut futures_util::lock::MutexGuard<'_, Tx<Box<String>>>,
+// ) {
+//     read_streams(vec_tcp_streams, cmd, map_filenames, conn_tx).await;
+// }
