@@ -24,15 +24,15 @@ fn get_connection_addresses() -> (Vec<String>, String){
             panic!("Error: config.json structure damaged.\n{}", e);
         }
     };
-    let port: String = conf["server_port"].to_string();
+    let port: String = conf["server_port"].as_str().expect("Failed to get port as string").to_string();
     let addresses_conf = conf["dns_web_addresses"].as_array().expect("Dns_web_addresses not an array or was malformed");
     // Clearing out old 
     let addresses_string: Vec<String>= addresses_conf.into_iter().map(|element| {
-        element.to_string()
+        element.as_str().expect("Failed to get address as string").to_string()
     }).collect();
     return (addresses_string, port);
 }
-async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disconnected: &Vec<String>) {
+async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disconnected: &Vec<String>) -> Vec<String>{
     let (mut addresses_string, port) = get_connection_addresses();
     tcpstreams.retain(| (stream, address)| {
         let mut buf = Vec::new();
@@ -62,19 +62,22 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
         
         output
     });
+    let mut output = Vec::new();
     for address in addresses_string {
         if !disconnected.contains(&address.to_string()) {
             continue;
         }
-        let stream_future = TcpStream::connect(format!("{}:{}", address, port));
+        let stream_future = TcpStream::connect(address.to_string() + ":" + port.as_str());
         // Only allow 10 seconds for each connection to establish and if not established give up
         // This way we aren't waiting forever for a connection
+        println!("Starting timeout");
         let stream = match timeout(Duration::from_secs(10), stream_future).await {
             Ok(x) => {
                 match x {
                     Ok(e) => e,
-                    Err(_) => {
-                        println!("Failed to connect to address: {}:{}", address, port);
+                    Err(e) => {
+                        println!("Failed to connect to address: {}:{}, {}", address, port,e );
+                        output.push(address);
                         continue;
                     }
                 }
@@ -85,6 +88,7 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
         };
         tcpstreams.push((stream, address.to_string()));
     }
+    return output;
 
 
 }
@@ -150,10 +154,10 @@ pub async fn run(context: SteadyContext,
         // }
         let mut connections = Vec::new();
 
-        check_connections_config(&mut connections, &disconnected).await;
+        disconnected = check_connections_config(&mut connections, &disconnected).await;
         // Sends over all new connections that should be held
         cmd.send_async(&mut tx, connections, SendSaturation::IgnoreAndWait).await;
-        disconnected = Vec::new();
+        
         // As long as there is something to read, keep reading
         loop {
             match cmd.try_take(&mut rx) {
