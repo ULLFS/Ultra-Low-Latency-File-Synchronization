@@ -50,7 +50,8 @@ async fn read_streams <C: SteadyCommander>(
 
         } else {
             vec_disconnected.push(name.to_string());
-            cmd.send_async(conn_tx, Box::new(name.to_string()), SendSaturation::IgnoreAndWait).await;
+            let _ = cmd.send_async(conn_tx, Box::new(name.to_string()), SendSaturation::IgnoreAndWait).await;
+            cmd.relay_stats();
         }
     };
     streams.retain(|(stream, name)| {
@@ -113,7 +114,6 @@ async fn internal_behavior <C: SteadyCommander>(
         
         read_streams(&mut vec_tcp_streams, &mut cmd, &mut map_filenames, &mut conn_tx).await;
             
-    // println!("Weee");
         match cmd.try_take(&mut ebpf_rx) {
             Some(file) => {
                 println!("Received a file to send: {}", file);

@@ -36,7 +36,9 @@ fn main() {
                                                    , service_user);
 
     if !systemd_command {
+
         info!("Starting up");
+        
         let mut graph = build_graph(GraphBuilder::for_production()
                                 .with_telemtry_production_rate_ms(200)
                                 .build(opt.clone()) );
@@ -61,11 +63,12 @@ fn build_graph(mut graph: Graph) -> Graph {
     //this common root of the actor builder allows for common config of all actors
     let base_actor_builder = graph.actor_builder()
         .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m256()), AlertColor::Yellow)
-        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m512()), AlertColor::Orange)
-        .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m768()), AlertColor::Red)
+        .with_mcpu_trigger(Trigger::AvgAbove(MCPU::m768()), AlertColor::Orange)
+        .with_mcpu_trigger(Trigger::AvgAbove( MCPU::m1024()), AlertColor::Red)
         .with_thread_info()
         .with_mcpu_avg()
         .with_load_avg();
+
 
     //build channels
     let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder
@@ -79,15 +82,14 @@ fn build_graph(mut graph: Graph) -> Graph {
         let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder
             .with_capacity(1024)
             .build();
+
    
     //build actors
-    
     {
         // Detects all changes in the file system thanks to eBPF.
-        // This thing was annoying to build
         let state = new_state();
 
-        base_actor_builder.with_name("EbpfListenerActor")
+        base_actor_builder.with_name("Ebpf Listener")
                  .build( move |context| actor::ebpf_listener::run(context
                                             , ebpf_listener_conn_tx.clone()
                                             , state.clone())
@@ -96,10 +98,9 @@ fn build_graph(mut graph: Graph) -> Graph {
     }
 
     {
-        // Cleans the ram on a timeout, every minute looping through each of our files stored in ram
-        // To see if we need to clean 
+        // Cleans the ram on a timeout, every minute looping through each of our files stored in ram to see if we need to clean
         let state = new_state();
-        base_actor_builder.with_name("RamCleanerActor")
+        base_actor_builder.with_name("RAM Cleaner")
                     .build(move | context | actor::ram_cleaner::run(context,
                                              state.clone())
                     ,&mut Threading::Spawn);
@@ -109,7 +110,7 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         // Sends data over TCP. Just tell it what file to send and it should handle it from there
         let state = new_state();
-        base_actor_builder.with_name("TCPSenderActor")
+        base_actor_builder.with_name("TCP Sender")
                         .build(move | context | actor::tcp_sender::run(context, 
                             ebpf_listener_conn_rx.clone(), 
                             tcp_listener_conn_rx.clone(),
@@ -122,7 +123,7 @@ fn build_graph(mut graph: Graph) -> Graph {
     {
         // Listens over TCP, will handle reconnecting when connections are lost and full file transmission in case of error
         let state = new_state();
-        base_actor_builder.with_name("Connectionhandler")
+        base_actor_builder.with_name("Connection handler")
                             .build(move | context | actor::connection_handler::run(context, 
                                 tcp_listener_conn_tx.clone(),
                                 connection_handler_conn_rx.clone(),
@@ -131,8 +132,8 @@ fn build_graph(mut graph: Graph) -> Graph {
         
     }
     
-    
     graph
+    
 }
 
 #[cfg(test)]

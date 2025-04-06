@@ -47,11 +47,10 @@ pub async fn run(context: SteadyContext
 
     // if needed CLI Args can be pulled into state from _cli_args
     let _cli_args = context.args::<Args>();
-
     // monitor consumes context and ensures all the traffic on the chosen channels is monitored
     // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
     let cmd = into_monitor!(context, [], [transmitter]);
-    internal_behavior(cmd, transmitter,state).await
+    internal_behavior(cmd, transmitter, state).await
 
 }
 
@@ -223,10 +222,7 @@ async fn internal_behavior <C: SteadyCommander>(
         // println!("Received some data: {}", received_string);
         let mut transmit_lock = transmitter.lock().await;
 
-        while cmd.is_running(&mut || {
-            transmit_lock.mark_closed()
-        }
-        ){
+        while cmd.is_running(&mut || transmit_lock.mark_closed()){
             // This begins the weird translation between tokio and steady state
             // It exists purely because Steady State does not work with Aya alone
             // We needed multi transmitters and a single receiver.
