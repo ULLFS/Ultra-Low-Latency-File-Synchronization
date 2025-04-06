@@ -220,8 +220,12 @@ async fn internal_behavior(context: SteadyContext,
         //     None => "FAILURE".to_string()
         // };
         // println!("Received some data: {}", received_string);
+        let mut transmit_lock = transmitter.lock().await;
 
-        loop{
+        while cmd.is_running(&mut || {
+            transmit_lock.mark_closed()
+        }
+        ){
             // This begins the weird translation between tokio and steady state
             // It exists purely because Steady State does not work with Aya alone
             // We needed multi transmitters and a single receiver.
@@ -235,8 +239,14 @@ async fn internal_behavior(context: SteadyContext,
                 }
             };
             println!("Data Recieved: {}", received_string);
-            let mut transmit_lock = transmitter.lock().await;
-            cmd.send_async(&mut transmit_lock, Box::new(received_string), SendSaturation::IgnoreAndWait).await;
+            match cmd.send_async(&mut transmit_lock, Box::new(received_string), SendSaturation::IgnoreAndWait).await {
+                Ok(_) => {
+                    println!("Sent data");
+                },
+                Err(x) => {
+                    println!("Error on send_async: {}", x);
+                }
+            };
             received_data = rx.recv().await;
 
         }

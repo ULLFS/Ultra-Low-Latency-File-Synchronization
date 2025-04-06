@@ -70,13 +70,15 @@ fn build_graph(mut graph: Graph) -> Graph {
     
     {
         
-        let state = new_state();
+
         let (ebpf_listener_conn_tx, ebpf_listener_conn_rx) = base_channel_builder.build();
-        // let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder.build();
+        let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder.build();
 
-
+        let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder.build();
         // Detects all changes in the file system thanks to eBPF.
         // This thing was annoying to build
+        let state = new_state();
+
         base_actor_builder.with_name("EbpfListenerActor")
                  .build( move |context| actor::ebpf_listener::run(context
                                             , ebpf_listener_conn_tx.clone()
@@ -94,13 +96,18 @@ fn build_graph(mut graph: Graph) -> Graph {
         base_actor_builder.with_name("TCPSenderActor")
                         .build(move | context | actor::tcp_sender::run(context, 
                             ebpf_listener_conn_rx.clone(), 
-                            // tcp_listener_conn_rx.clone(),
+                            tcp_listener_conn_rx.clone(),
+                            connection_handler_conn_tx.clone(),
                             state.clone()),
                     &mut Threading::Spawn);
         // Listens over TCP, will handle reconnecting when connections are lost and full file transmission in case of error
         let state = new_state();
-        base_actor_builder.with_name("TCPListenerActor")
-                            .build(move | context | actor::connection_handler::run(context, state.clone()),
+        base_actor_builder.with_name("Connectionhandler")
+                            .build(move | context | actor::connection_handler::run(context, 
+                                tcp_listener_conn_tx.clone(),
+                                connection_handler_conn_rx.clone(),
+                                state.clone()),
+                            
                             &mut Threading::Spawn);
         
     }

@@ -35,13 +35,13 @@ impl Delta {
     }
 }
 pub struct FileData{
-    file_map: RwLock<HashMap<&'static str, &'static mut File>>,
+    file_map: RwLock<HashMap<String, File>>,
     file_store_time: u32,
     max_total_size: u32,
     cur_total_size: u32
 }
 impl FileData {
-    fn new() -> Self {
+    fn new<'a>() -> Self {
         let conf_file : fs::File = match fs::File::open("./config.json"){
             Ok(x) => x,
             Err(e) => {
@@ -56,10 +56,10 @@ impl FileData {
                 panic!("Error: config.json structure damaged.\n{}", e);
             }
         }; 
-        let file_store_time: u32 = match conf["file_store_time_seconds"].as_u64(){
+        let file_store_time: u32 = match conf["file_store_time_minutes"].as_u64(){
             Some(x) =>x as u32,
             None => {
-                panic!("Error: file_store_time_seconds did not exist in config.json or was not an integer.");
+                panic!("Error: file_store_time_minutes did not exist in config.json or was not an integer.");
             }
         };
         let max_total_size: u32 = match conf["max_total_size_mb"].as_u64(){
@@ -70,7 +70,7 @@ impl FileData {
         };
 
         // let map: HashMap<String, File> = );
-        let map: HashMap<&'static str, &'static mut File> = HashMap::new();
+        let map: HashMap<String, File> = HashMap::new();
         FileData { 
             file_map: RwLock::new(map),
             file_store_time: file_store_time,
@@ -88,49 +88,34 @@ impl FileData {
     // async fn timeout(){
         
     // }
+    pub fn add_file(&self, filepath: String) {
+        let mut files = self.file_map.write();
+        
+    }
     pub fn clean_ram(&self, minutes_passed: u32) -> bool{
-        let mut remove_files = Vec::new();
-
-        let mut files = match self.file_map.try_write(){
-            Ok(mut files) => {
-                
-                files
-            }
-            Err(_) => {
-                // if we get an error, just assume we can't clean ram right now and something else is
-                // messing with the file storage.
-                // I elected to skip this clean cycle rather than waiting
-                // The future cycle will know how many minutes have passed because it will check this return value
-                // On false, the clean cycle was skipped so incremement num minutes
+        let mut files = match self.file_map.try_write() {
+            Ok(mut files) => files,
+            Err(e) => {
+                println!("Failed to clean RAM, error: {}", e);
                 return false;
             }
         };
-        for (filename, mut file) in files.iter_mut(){
+        
+        files.retain(|_, file| {
             if file.time_remaining >= minutes_passed {
                 file.time_remaining -= minutes_passed;
+                true
             } else {
-                // files.remove(filename);
-                remove_files.push(filename);
+                println!("Deleting a file");
+                false
             }
-        }
-        let mut files = match self.file_map.try_write(){
-            Ok(mut files) => {
-                
-                files
-            }
-            Err(_) => {
-                // if we get an error, just assume we can't clean ram right now and something else is
-                // messing with the file storage.
-                // I elected to skip this clean cycle rather than waiting
-                // The future cycle will know how many minutes have passed because it will check this return value
-                // On false, the clean cycle was skipped so incremement num minutes
-                return false;
-            }
-        };
-        for filename in remove_files{
-            files.remove(filename);
-        }
-        return true;
+        });
+        
+        true
+    }
+    pub fn contains_file(&self, path: &str) -> bool {
+        let map = self.file_map.read().unwrap();
+        map.contains_key(path)
     }
     pub fn get_file_delta(&self, path : &str) -> Delta{
         println!("{}", path);
@@ -158,9 +143,9 @@ impl FileData {
                 
                 let f: File = File::new(buf, self.file_store_time);
                 // Create a static str:
-                let path_static: &'static str = Box::leak(Box::new(path.to_string()));
-                let f_static : &'static mut File = Box::leak(Box::new(f));
-                map.insert(path_static, f_static);
+                // let path_static: &'static str = Box::leak(Box::new(path.to_string()));
+                // let f_static : &'static mut File = Box::leak(Box::new(f));
+                map.insert(path.to_string(), f);
                 return Delta::new(0,0, data_clone, 0);
                 
             }
@@ -168,7 +153,7 @@ impl FileData {
         let output_data = get_delta(&file_data.data, &buf);
         
         let f = File::new(buf, self.file_store_time);
-        *map.get_mut(path).unwrap() = Box::leak(Box::new(f));
+        *map.get_mut(path).unwrap() = f;
         return output_data;
     }
 }
