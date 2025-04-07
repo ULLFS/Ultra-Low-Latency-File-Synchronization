@@ -66,9 +66,9 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_capacity(1024)
         .build();
 
-        let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
+        /* let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
         .with_capacity(10)
-        .build();
+        .build(); */
 
     let (tcplisteneractor_error_conn_tx, errorlogger_listener_rx) = base_channel_builder
         .with_capacity(5)
@@ -78,9 +78,9 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_capacity(5)
         .build();
 
-    let (configchecker_error_conn_tx, errorlogger_config_rx) = base_channel_builder
+    /* let (configchecker_error_conn_tx, errorlogger_config_rx) = base_channel_builder
         .with_capacity(5)
-        .build();
+        .build(); */
 
     //build actors
     
@@ -104,14 +104,14 @@ fn build_graph(mut graph: Graph) -> Graph {
                  .build( move |context| actor::tcp_worker::run(context
                                             , tcpworker_error_conn_tx.clone()
                                             , tcpworkeractor_tcp_conn_rx.clone()
-                                            ,tcpworker_str_conn_rx.clone()
+                                            //,tcpworker_str_conn_rx.clone()
                                             )
                   , &mut Threading::Spawn );
         
     }
     
 
-    {
+    /* {
 
         base_actor_builder.with_name("Config Checker")
                     .build(move |context| actor::config_checker::run(context
@@ -120,7 +120,7 @@ fn build_graph(mut graph: Graph) -> Graph {
                                                )
                     ,&mut Threading::Spawn );
     
-    }
+    } */
 
 
     {
@@ -129,7 +129,7 @@ fn build_graph(mut graph: Graph) -> Graph {
                     .build(move |context| actor::error_logger::run(context
                                                 ,errorlogger_listener_rx.clone()
                                                 ,errorlogger_worker_rx.clone()
-                                                ,errorlogger_config_rx.clone()
+                                                //,errorlogger_config_rx.clone()
                                                 )
                     , &mut Threading::Spawn);
     }

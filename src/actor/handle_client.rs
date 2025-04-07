@@ -39,7 +39,7 @@ fn filepath_state(b: u8, state: &mut State, filepath: &mut String, curbyte: usiz
     }
 }
 
-fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, reader: &mut Option<BufReader<File>>, cur_index: &mut u64, curbyte: usize, total_bytes: usize, file_path: &String, save_path : &String){
+fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, reader: &mut Option<BufReader<File>>, cur_index: &mut u64, curbyte: usize, total_bytes: usize, file_path: &String, save_path : &str){
     println!("In flag state {}, {}", curbyte, total_bytes);
     match b {
         1u8 => {
@@ -67,7 +67,7 @@ fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, re
     }
 }
 
-fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, cur_index: &mut u64, file_path: &String, save_path : &String, filelength: &mut u64){
+fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, cur_index: &mut u64, file_path: &String, save_path : &str, filelength: &mut u64){
     // println!("{}",2u64.pow(cur_index as u32));
     *filelength += (b as u64) << 8 * *cur_index;
     *cur_index += 1;
@@ -101,7 +101,7 @@ fn pull_u64(b: u8, state: &mut State, data: &mut u64, cur_index: &mut u64, next_
     }
 }
 
-pub async fn processing(stream: &TcpStream, save_path : &String) {
+pub async fn processing(stream: &TcpStream, save_path : &str) {
     println!("Accepted connection");
     // let mut stream = a.0;
     let mut state = State::Filepath;
