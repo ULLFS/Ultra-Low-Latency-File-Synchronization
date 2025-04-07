@@ -74,8 +74,8 @@ async fn internal_behavior <C: SteadyCommander>(
         let _ = cmd.send_async(&mut config_conn_tx, ConfigMsg { text: format!("{}", watch_dir)},SendSaturation::IgnoreAndWait,).await;
         cmd.relay_stats();
 
-        println!("(config_checker) this message should output every 15 seconds!!!");
-        sleep(Duration::from_secs(15)).await;
+        println!("(config_checker) this message should output every 5 mins!!!");
+        sleep(Duration::from_secs(300)).await;
 
     }
     Ok(())
