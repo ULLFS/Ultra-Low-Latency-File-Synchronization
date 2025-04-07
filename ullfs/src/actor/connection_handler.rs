@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fs, io::BufReader, ops::Index, tim
 use serde_json::Value;
 use steady_state::*;
 use tokio::{net::{unix::SocketAddr, TcpSocket, TcpStream}, time::{timeout, sleep}};
-use crate::Args;
+use crate::{Args, TcpChannel};
 use super::ebpf_listener::RuntimeState;
 
 fn resend_data(input_data: Vec<u8>){
@@ -96,23 +96,28 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
 }
 
 pub async fn run(context: SteadyContext
-    , transmitter: SteadyTx<Vec<(TcpStream, String)>>
-    , receiver: SteadyRx<Box<String>>
+    , transmitter: SteadyTx<TcpChannel>
+    , receiver: SteadyRx<String>
     , state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>> {
 
     // if needed CLI Args can be pulled into state from _cli_args
     let _cli_args = context.args::<Args>();
     // monitor consumes context and ensures all the traffic on the chosen channels is monitored
     // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-    let cmd =  into_monitor!(context, [receiver],[transmitter]);
-    internal_behavior(cmd,transmitter,receiver,state).await
 
+    let cmd = into_monitor!(context, [receiver], [transmitter]);
+    // while cmd.is_running(|| {
+    //     true
+    // }) {}
+    // Ok(())
+    // let cmd =  into_monitor!(context, [receiver],[transmitter]);
+    internal_behavior(cmd,transmitter,receiver,state).await
 }
 
 async fn internal_behavior <C: SteadyCommander>(
     mut cmd: C, 
-    transmitter: SteadyTx<Vec<(TcpStream, String)>>,
-    receiver: SteadyRx<Box<String>>,
+    transmitter: SteadyTx<TcpChannel>,
+    receiver: SteadyRx<String>,
     state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
     
@@ -137,8 +142,12 @@ async fn internal_behavior <C: SteadyCommander>(
         disconnected = check_connections_config(&mut connections, &disconnected).await;
 
         // Sends over all new connections that should be held
-        let _ = cmd.send_async(&mut tx, connections, SendSaturation::IgnoreAndWait).await;
+        for connection in connections {
+            let connection_struct: TcpChannel = TcpChannel { stream: connection.0, name: connection.1 };
+            let _ = cmd.send_async(&mut tx, connection_struct, SendSaturation::IgnoreAndWait).await;
+        }
         cmd.relay_stats();
+
         
         // As long as there is something to read, keep reading
         loop {

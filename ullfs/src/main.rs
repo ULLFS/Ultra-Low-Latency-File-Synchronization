@@ -6,6 +6,7 @@ use serde_json::Value;
 use structopt::StructOpt;
 #[allow(unused_imports)]
 use log::*;
+use tokio::net::TcpStream;
 use crate::args::Args;
 use std::{fs, io::BufReader, process, sync::Arc, thread::Thread, time::Duration};
 use steady_state::*;
@@ -25,7 +26,10 @@ mod actor {
         pub mod tcp_sender;
         pub mod connection_handler;
 }
-
+pub struct TcpChannel {
+    stream: TcpStream,
+    name: String
+}
 fn main() {
     let opt = Args::from_args();
 
@@ -75,11 +79,11 @@ fn build_graph(mut graph: Graph) -> Graph {
             .with_capacity(1024)
             .build();
 
-        let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder
+    let (tcp_listener_conn_tx, tcp_listener_conn_rx) = base_channel_builder
             .with_capacity(1024)
             .build();
 
-        let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder
+    let (connection_handler_conn_tx, connection_handler_conn_rx) = base_channel_builder
             .with_capacity(1024)
             .build();
 
@@ -96,7 +100,6 @@ fn build_graph(mut graph: Graph) -> Graph {
                   , &mut Threading::Spawn );
 
     }
-
     {
         // Cleans the ram on a timeout, every minute looping through each of our files stored in ram to see if we need to clean
         let state = new_state();
@@ -109,13 +112,14 @@ fn build_graph(mut graph: Graph) -> Graph {
 
     {
         // Sends data over TCP. Just tell it what file to send and it should handle it from there
-        let state = new_state();
+        let state: Arc<futures_util::lock::Mutex<Option<actor::ebpf_listener::RuntimeState>>> = new_state();
         base_actor_builder.with_name("TCP Sender")
                         .build(move | context | actor::tcp_sender::run(context, 
                             ebpf_listener_conn_rx.clone(), 
                             tcp_listener_conn_rx.clone(),
                             connection_handler_conn_tx.clone(),
-                            state.clone())
+                            state.clone()
+                        )
                     ,&mut Threading::Spawn);
 
     }

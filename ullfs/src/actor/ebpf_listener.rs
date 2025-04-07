@@ -41,22 +41,32 @@ impl RuntimeState {
 }
 
 pub async fn run(context: SteadyContext
-        ,transmitter: SteadyTx<Box<String>>
+        ,transmitter: SteadyTx<String>
         ,state: SteadyState<RuntimeState>
     ) -> Result<(),Box<dyn Error>> {
 
     // if needed CLI Args can be pulled into state from _cli_args
     let _cli_args = context.args::<Args>();
+    println!("Ebpf listener active");
     // monitor consumes context and ensures all the traffic on the chosen channels is monitored
     // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-    let cmd = into_monitor!(context, [], [transmitter]);
+    let mut cmd = into_monitor!(context, [], [transmitter]);
+    // while cmd.is_running(|| {
+    //     true
+    // })
+    //  {
+
+    //  }
+    // // loop {}
+    // Ok(())
+    // let cmd = into_monitor!(context, [], [transmitter]);
     internal_behavior(cmd, transmitter, state).await
 
 }
 
 async fn internal_behavior <C: SteadyCommander>(
     mut cmd: C, 
-    transmitter: SteadyTx<Box<String>>,
+    transmitter: SteadyTx<String>,
     state: SteadyState<RuntimeState>,
 ) -> Result<(),Box<dyn Error>> {
     let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
@@ -236,7 +246,7 @@ async fn internal_behavior <C: SteadyCommander>(
                 }
             };
             println!("Data Recieved: {}", received_string);
-            match cmd.send_async(&mut transmit_lock, Box::new(received_string), SendSaturation::IgnoreAndWait).await {
+            match cmd.send_async(&mut transmit_lock, received_string, SendSaturation::IgnoreAndWait).await {
                 Ok(_) => {
                     println!("Sent data");
                 },
@@ -244,6 +254,7 @@ async fn internal_behavior <C: SteadyCommander>(
                     println!("Error on send_async: {}", x);
                 }
             };
+            cmd.relay_stats();
             received_data = rx.recv().await;
 
         }
