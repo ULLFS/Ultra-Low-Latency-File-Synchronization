@@ -54,7 +54,7 @@ async fn internal_behavior<C: SteadyCommander>(
         /* let clean = await_for_any!(cmd.wait_avail(&mut tcp_conn_rx, 1) */
                                         /* ,cmd.wait_avail(&mut tcp_conn_config_rx,1) );*/
 
-        println!("(tcp_worker) hello");
+        //println!("(tcp_worker) hello");
         //sleep(Duration::from_secs(1)).await;
 
         match cmd.try_take(&mut tcp_conn_config_rx){
