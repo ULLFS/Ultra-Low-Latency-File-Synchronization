@@ -26,6 +26,15 @@ async fn full_file<R: AsyncRead + Unpin>(
     let full_path = create_global_path(save_path, &path);
     println!("Writing full file for: {}, length: {}", full_path, length);
     let mut cur_read = 0;
+    let file_path = Path::new(&full_path);
+    match file_path.parent() {
+        Some(x) => {
+            if !x.exists() {
+                fs::create_dir_all(x).expect("Failed to create file directory");
+            }
+        }
+        None => {}
+    };
     let mut writer = fs::File::create(&full_path).expect("failed to create writer file");
     while cur_read < length {
         
@@ -68,7 +77,14 @@ async fn delta_file<R: AsyncRead + Unpin>(
         path.display(), start, end, length, hash
     );
     // let path_dir = path.parent();
-    
+    match path.parent() {
+        Some(x) => {
+            if !x.exists() {
+                fs::create_dir_all(x).expect("Failed to create file directory");
+            }
+        }
+        None => {}
+    };
     let path_temp = global_path.to_string() + ".temp";
     let hash_correct = {
         let mut file_reader = fs::File::open(&path).expect("failed to open file");
@@ -90,7 +106,7 @@ async fn delta_file<R: AsyncRead + Unpin>(
         if start > end {
             seek_num = start - 1;
         } else {
-            seek_num = end;
+            seek_num = end;     
         }
         // file_reader.seek(SeekFrom::Start(seek_num)).expect("failed to seek");
         let mut temp_writer = fs::File::create(&path_temp).expect("Failed to create file");
