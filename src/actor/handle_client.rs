@@ -3,328 +3,202 @@
 // use librsync::Delta;
 
 // use core::slice::SlicePattern;
-use std::{env::temp_dir, error::Error, fs::{self, File}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}};
-use tokio::net::{TcpStream, TcpListener};
+use std::{env::temp_dir, error::Error, fs::{self, create_dir_all, File}, future::Future, io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write}, path::Path, pin::Pin, usize::MAX};
+use steady_state::SteadyCommander;
+use tokio::{io::{self, AsyncRead, AsyncReadExt}, net::{TcpListener, TcpStream}};
 // use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 use xxhash_rust::xxh3::xxh3_64;
+const MAX_LENGTH_READ: u64 = 1024;
 
-#[derive(PartialEq, Eq)]
-enum State {
-    Filepath,
-    Flag,
-    FileLength,
-    FileData,
-    FileDeltaStart,
-    FileDeltaEnd,
-    FileDeltaData,
-    FileDeltaDataLength,
-    FileDeltaHash,
-    FileDeltaDataToss,
-    // FileDeltaHashEnd,
+fn create_global_path(save_path : &str, path: &str) -> String {
+    let full_path = format!("{}/{}", save_path, path);
+    return full_path;
 }
 
-fn ask_for_file(file: &String, _stream: &TcpStream){
-    println!("Got the wrong hash for the file: {}", file);
-}
+async fn full_file<R: AsyncRead + Unpin>(
+    path: String,
+    length: u64,
+    reader: &mut R,
+    save_path : &str
+) -> io::Result<()> {
+    // Your file handling logic
+    // stream_data(&path, length, reader).await
+    let full_path = create_global_path(save_path, &path);
+    println!("Writing full file for: {}, length: {}", full_path, length);
+    let mut cur_read = 0;
+    let mut writer = fs::File::create(&full_path).expect("failed to create writer file");
+    while cur_read < length {
+        
+        let read_amount = std::cmp::min(MAX_LENGTH_READ, length - cur_read);
+        cur_read += read_amount;
+        println!("Read amount: {}", read_amount);
+        let mut arr: Box<[u8]> = vec![0; read_amount as usize].into_boxed_slice();
+        reader.read_exact(&mut arr).await?;
+        // Do the stuff here with arr
+        writer.write(&arr).expect("Failed to write to writer");
 
-fn filepath_state(b: u8, state: &mut State, filepath: &mut String, curbyte: usize, total_bytes: usize) {
-    if b == 0b0000 {
-        println!("Changing to flag state, {}, {}", curbyte, total_bytes);
+
+    }
+    Ok(())
+}
+async fn read_null_terminated_string<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<String> {
+    let mut buf = Vec::new();
+    let mut byte = [0u8];
+    while reader.read_exact(&mut byte).await.is_ok() {
+        if byte[0] == 0 {
+            break;
+        }
+        buf.push(byte[0]);
+    }
+    String::from_utf8(buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+}
+async fn delta_file<R: AsyncRead + Unpin>(
+    path: &str,
+    start: u64,
+    end: u64,
+    length: u64,
+    hash: u64,
+    reader: &mut R,
+    save_path : &str
+) -> io::Result<()> {
+    let global_path = create_global_path(save_path, path);
+    let path = Path::new(&global_path);
+    println!(
+        "[delta] {}: bytes {}-{} (len {}) hash={}",
+        path.display(), start, end, length, hash
+    );
+    // let path_dir = path.parent();
     
-        *state = State::Flag;
-    }
-    else {
-        filepath.push(char::from(b));
-        println!("{}", filepath);
-    }
-}
+    let path_temp = global_path.to_string() + ".temp";
+    let hash_correct = {
+        let mut file_reader = fs::File::open(&path).expect("failed to open file");
+        let mut sbuf = Vec::new();
+        file_reader.read_to_end(&mut sbuf).expect("Failed to read file to hash");
+        let hash_val = xxh3_64(&mut sbuf);
+        hash_val == hash
+    };
+    let mut cur_read = 0;
+    // let mut temp_writer = None;
 
-fn flag_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, reader: &mut Option<BufReader<File>>, cur_index: &mut u64, curbyte: usize, total_bytes: usize, file_path: &String, save_path : &str){
-    println!("In flag state {}, {}", curbyte, total_bytes);
-    match b {
-        1u8 => {
-            *cur_index = 0;
-            println!("Changing to fileLength state");
-            *state = State::FileLength;
+    if hash_correct {
+        println!("Hash was correct");
+        let mut file_reader = fs::File::open(path).expect("failed to open file");
+
+        // if we have the correct hash, read the file first up to start
+        let seek_num;
+
+        if start > end {
+            seek_num = start - 1;
+        } else {
+            seek_num = end;
         }
-        2u8 => {
-            *cur_index = 0;
-            println!("Changing to file delta state");
-            let local_path = format!("{}/{}", save_path, file_path);
-            println!("File: {}", local_path);
-            let f = fs::File::open(&local_path).expect("Failed to open the file for deltas");
-            *writer = Some(BufWriter::new(f));
-            let f = fs::File::open(local_path).expect("Failed to open the file for deltas");
+        // file_reader.seek(SeekFrom::Start(seek_num)).expect("failed to seek");
+        let mut temp_writer = fs::File::create(&path_temp).expect("Failed to create file");
+        println!("Created tempwriter and will be reading: {}", start - 1);
+        let mut cur_read_file = 0;
+        while cur_read_file < start - 1 {
+            let read_amount = std::cmp::min(MAX_LENGTH_READ, start - 1 - cur_read_file);
+            cur_read_file += read_amount;
+            let mut arr: Box<[u8]> = vec![0; read_amount as usize].into_boxed_slice();
+            file_reader.read_exact(&mut arr).expect("Failed to read from the reader");
+            temp_writer.write(&arr).expect("Failed to write to temp file");
+        }
+        // Then read the data from the stream
+        println!("Reading stream data for: {}", length);
+        while cur_read < length {
+            let read_amount = std::cmp::min(MAX_LENGTH_READ, length - cur_read);
+            println!("Reading amount: {}", read_amount);
+            cur_read += read_amount;
+            let mut arr: Box<[u8]> = vec![0; read_amount as usize].into_boxed_slice();
+            reader.read_exact(&mut arr).await?;
+            // Do the stuff here with arr
+            temp_writer.write(&arr).expect("Failed to write data");
             
-            *reader = Some(BufReader::new(f));
-            // file = Some(fs::File::open(filepath).expect("Failed to open the file"));
+        }
+        // Then seek to the proper position and write the rest of the file
+        file_reader.seek(SeekFrom::Start(seek_num)).expect("Failed to seek");
+        let mut cur_read_file = seek_num;
+        let file_length = file_reader.metadata().unwrap().len();
+        while cur_read_file < file_length {
+            println!("File length: {}, cur_read_file: {}", file_length, cur_read_file);
+            let read_amount = std::cmp::min(MAX_LENGTH_READ, file_length - cur_read_file);
+            cur_read_file += read_amount;
+            let mut arr: Box<[u8]> = vec![0; read_amount as usize].into_boxed_slice();
+            file_reader.read_exact(&mut arr).expect("Failed to read from the reader");
+            temp_writer.write(&arr).expect("Failed to write to temp file");
+        }
+        // temp_writer = writer;/
+        // Only let us write if it isn't none
+        // Let's write to the start value:
+        fs::rename(path_temp, global_path).expect("Failed to rename file");
+        println!("Finished with the delta!");
+
+    } else {
+        // seek_num = 0;
+        println!("hash incorrect, reading excess data for {} bytes", length);
+        while cur_read < length {
+            let read_amount = std::cmp::min(MAX_LENGTH_READ, length - cur_read);
+            cur_read += read_amount;
+            let mut arr: Box<[u8]> = vec![0; read_amount as usize].into_boxed_slice();
+            reader.read_exact(&mut arr).await?;
+            // Do the stuff here with arr
+            // In this case we just skip all of it
+            // temp_writer.write(&arr).expect("Failed to write data");
             
-            *state = State::FileDeltaStart;
         }
-        _ => {
-            println!("Got bad data: {}", b);
-        }
+        println!("Hash incorrect!");
     }
-}
-
-fn file_length_state(b: u8, state: &mut State, writer: &mut Option<BufWriter<File>>, cur_index: &mut u64, file_path: &String, save_path : &str, filelength: &mut u64){
-    // println!("{}",2u64.pow(cur_index as u32));
-    *filelength += (b as u64) << 8 * *cur_index;
-    *cur_index += 1;
-    println!("File length: {}", filelength);
-    if *cur_index >= 8{
-        println!("Changing to filedata state");
-        *state = State::FileData;
-        *cur_index = 0;
-        let local_path = format!("{}/{}", save_path, file_path);
-        // if !fs::exists(&local_path).expect("Why would this ever error, error on fs exists") {
-        //     fs::File::create(&local_path).expect(format!("Failed to create file that didn't exist {}", local_path).as_str());
-        // }
-        let f = fs::File::create(&local_path).expect(format!("failed to open file: {}", local_path).as_str());
-        *writer = Some(BufWriter::new(f));
-    }
-}
-
-fn pull_u64(b: u8, state: &mut State, data: &mut u64, cur_index: &mut u64, next_state: State) {
-    println!("{}",b);
-    let shift_amount;
-    // assert!(8 * *cur_index < 63);
-    shift_amount = (b as u64) << 8 * *cur_index;
-    println!("Shift amount: {}", shift_amount);
-    *data += shift_amount;
-    *cur_index += 1;
-    println!("{}\nIndex: {}",data, cur_index);
     
-    if *cur_index >= 8 {
-        *cur_index = 0;
-        *state = next_state;
-    }
+    
+    
+    // stream_data(&path, length, reader).await
+    Ok(())
 }
 
-pub async fn processing(stream: &TcpStream, save_path : &str) {
+pub async fn processing<C: SteadyCommander>(mut stream: TcpStream, save_path : &str, cmd: &mut C) {
     println!("Accepted connection");
     // let mut stream = a.0;
-    let mut state = State::Filepath;
-    let mut filepath: String = "".to_string();
-    let mut filelength: u64 = 0;
-    let mut cur_index: u64 = 0;
-    let mut writer: Option<BufWriter<File>> = None;
-    let mut reader: Option<BufReader<File>> = None;
-    let mut hash: u64 = 0;
-    let mut start_delta: u64 = 0;
-    let mut end_delta: u64 = 0;
-    
-    println!("Listening for data");
+    // let handler = MyHandler;
     loop {
-        let mut buf = [0; 1024];
-        let size = match stream.try_read(&mut buf){
-            Ok(x) => x,
-            Err(x) => {
-                if x.kind() != std::io::ErrorKind::WouldBlock{
-                    // println!();
-                    panic!("Non blocking error: {}", x)
-                }
-                continue;
+        match decode_stream(&mut stream, save_path).await {
+            Ok(_) => {}
+            Err(_) =>{
+                break;
             }
-        };
-        if size != 0 {
-            println!("Got data");
-            for i in 0..size + 1{
-                let b = buf[i];
-                match state {
-                    State::Filepath => {
-                        filepath_state(b, &mut state, &mut filepath, i, size);
-                    }
-                    State::Flag => {
-                        flag_state(b, &mut state, &mut writer, &mut reader, &mut cur_index, i, size, &filepath, save_path);
-                    }
-                    State::FileLength => {
-                        file_length_state(b, &mut state, &mut writer, &mut cur_index, &filepath, save_path, &mut filelength);
-                    }
-                    State::FileData => {
-                        // This one can't be a function easily because we don't know the size of the u8 array
-                        // println!("Writing bytes {} to {}", i, size);
-                        let f = writer.as_mut().unwrap();
-                        // Writing all the rest of the bytes at once
-                        let length = size as u64 - i as u64;
-                        let mut end = size;
-                        if filelength < cur_index + length {
-                            end = length as usize - cur_index as usize;
-                        }
-                        match f.write(&buf[i..end]) {
-                            Ok(_) => {},
-                            Err(x) => {
-                                panic!("Failed to write for reason: {}", x);
-                            }
-                        }
-                        
-                        cur_index += size as u64 - i as u64;
-                        if cur_index >= filelength {
-                            cur_index = 0;
-                            println!("Finished reading file {}", filepath);
-                            filepath = "".to_string();
-                            state = State::Filepath;
-                            filelength = 0;
-                            
-                            f.flush().expect("Failed to flush writer");
-                        } else {
-                            println!("{}: {}", cur_index, filelength);
-                        }
-                        
-                        break;
-                        
-                        
-                    }
-                    State::FileDeltaHash => {
-                        pull_u64(b, &mut state, &mut hash, &mut cur_index, State::FileDeltaData);  
-                        if state == State::FileDeltaData {
-                            // We have gotten the hash and now we compare it to the hash of the file we are testing against
-                            let mut f;
-                            if !fs::exists(save_path.to_string() + filepath.as_str()).expect("Failed to see if file exists") {
-                                // If the file doesn't exist we don't even have to begin checking the hash
-                                println!("File didn't exist");
-                                ask_for_file(&filepath, &stream);
-                                state = State::FileDeltaDataToss;
-                                break;
-                            }
-                            f = fs::File::open(save_path.to_string() + filepath.as_str()).expect("Failed to open file");
-                            let mut hash_buf: Vec<u8> = Vec::new();
-                            f.read_to_end(&mut hash_buf).expect("Failed to read to end of file");
-                            println!("{}", hash_buf.len());
-                            let x_hash = xxh3_64(&hash_buf);
-                            if x_hash != hash {
-                                // We got the wrong hash, ask for the full file
-                                ask_for_file(&filepath, &stream);
-                                println!("Wrong hash: {}, correct hash: {}", hash, x_hash);
-                                hash = 0;
-                                
-                                // let mut f = fs::File::create(DELTA_PATH.to_string() + )
-                                state = State::FileDeltaDataToss;
-                            } else {
-                                hash = 0;
-                                let write_file = fs::File::create(format!("{}{}.temp", save_path, filepath)).expect("Failed to create writable file");
-                                let mut w = BufWriter::new(write_file);
-                                // writer = Some(BufWriter::new(f));
-                                // Dont have to set the state again, the pull u64 got that for us
-                                let r = reader.as_mut().unwrap();
-                                // Creating fixed size array with a box to read the specific bytes we needed
-                                let mut buffer: Box<[u8]> = vec![0; start_delta as usize - 1].into_boxed_slice();
-                                r.read(&mut buffer).expect("Failed to read");
-                                let seek_num;
-                                if start_delta > end_delta {
-                                    seek_num = start_delta - 1;
-                                } else {
-                                    seek_num = end_delta;
-                                }
-                                r.seek(SeekFrom::Start(seek_num)).expect("Failed to seek"); // Seek to the next point we would be reading
-                                
-                                
-                                // Seek to the end of the delta in order to skip over any previous things
-                                w.write(&buffer).expect("Failed to write");
-                                // We have now written to the start of the buffer
-                                writer = Some(w);
-                            }
-                            
-                        } 
-                    }
-                    State::FileDeltaStart => {
-                        // let f = writer.as_mut().unwrap();
-                        // file_delta_start_state(b, &mut start_delta, &mut cur_index);
-                        print!("Starting value: ");
-                        pull_u64(b, &mut state, &mut start_delta, &mut cur_index, State::FileDeltaEnd);
-                        
-                        
-                    }
-                    State::FileDeltaDataLength => {
-                        print!("Length value: ");
-                        
-                        pull_u64(b, &mut state, &mut filelength, &mut cur_index, State::FileDeltaHash);
-                        // println!("filelength: {}", filelength);
-                    }
-                    State::FileDeltaEnd => {
-                        print!("End  value: ");
-                        
-                        pull_u64(b, &mut state, &mut end_delta, &mut cur_index, State::FileDeltaDataLength);
-                    }
-                    State::FileDeltaData => {
-                        // This one can't be a function easily because we don't know the size of the u8 array
-                        // println!("Writing bytes {} to {}", i, size);
-                        let f = writer.as_mut().unwrap();
-                        // let read = reader.as_mut().unwrap();
-                        // Writing all the rest of the bytes at once
-                        let length = size as u64 - i as u64;
-                        let mut end = size;
-                        if filelength < cur_index + length {
-                            end = length as usize - cur_index as usize;
-                        }
-                        
-                        match f.write(&buf[i..end]) {
-                            Ok(_) => {},
-                            Err(x) => {
-                                panic!("Failed to write for reason: {}", x);
-                            }
-                        }
-                        
-                        cur_index += size as u64 - i as u64;
-                        if cur_index >= filelength {
-                            // Get the length of the reader file
-                            println!("{}", filepath);
-                            // let reader_size = reader.unwrap().into_inner().metadata().unwrap().len();
-                            let fsize = fs::File::open(format!("{}{}", save_path, filepath)).unwrap().metadata().unwrap().len();
-                            println!("fsize: {}", fsize);
-                            println!("End delta: {}", end_delta);
-                            
-                            let end;
-                            if end_delta > start_delta {
-                                end = fsize - end_delta;
-                            } else {
-                                end = fsize - start_delta + 1;
-                            }
-                            println!("data size: {}", fsize - (fsize - end));
-                            let mut buffer: Box<[u8]> = vec![0; end as usize].into_boxed_slice();
-                            match reader.as_mut() {
-                                Some(x) => {
-                                    x.read(&mut buffer).expect("Failed to read to buffer");
-                                    f.write(&buffer).expect("Failed to write to buffer");
-                                }
-                                None => {
-                                    panic!("Reader was not initialized in deltas none");
-                                }
-                            };
-                            f.flush().expect("Failed to flush writer");
-                            fs::rename(format!("{}{}.temp", save_path, filepath), format!("{}{}", save_path, filepath)).expect("Failed to write to file");
-                            cur_index = 0;
-                            println!("Finished delta file {}", filepath);
-                            filepath = "".to_string();
-                            state = State::Filepath;
-                            filelength = 0;
-                            end_delta = 0;
-                            start_delta = 0;
-                            
-                            
-                        } else {
-                            println!("{}: {}", cur_index, filelength);
-                        }
-                        
-                        break;
-                    }
-                    State::FileDeltaDataToss => {
-                        // This is likely not the most efficient way to do this but it is the easiest
-                        cur_index += 1;
-                        println!("Index in data toss: {} / {}", cur_index, filelength);
-                        if cur_index > filelength {
-                            println!("Got out of filedeltadata");
-                            state = State::Filepath;
-                            cur_index = 0;
-                            filepath = String::new();
-                        }
-                    }
-                }    
-            }
-            
-            
         }
-        
+
     }
     
 }
+pub async fn decode_stream<R: AsyncRead + Unpin + Send>(
+    mut reader: R,
+    save_path: &str
+) -> io::Result<()> {
+    loop {
+        let path = read_null_terminated_string(&mut reader).await?;
+        let flag = reader.read_u8().await?;
+
+        match flag {
+            1 => {
+                let length = reader.read_u64_le().await?;
+                full_file(path, length, &mut reader, save_path).await?;
+            }
+            2 => {
+                let start = reader.read_u64_le().await?;
+                let end = reader.read_u64_le().await?;
+                let length = reader.read_u64_le().await?;
+                let hash = reader.read_u64_le().await?;
+                delta_file(&path, start, end, length, hash, &mut reader, save_path).await?;
+            }
+            other => {
+                return Err(io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Unknown flag: {}", other),
+                ));
+            }
+        }
+
+        // After processing one file, continue to the next file (if any)
+    }
+}
+

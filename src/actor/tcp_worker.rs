@@ -46,7 +46,7 @@ async fn internal_behavior<C: SteadyCommander>(
     let mut tcp_conn_rx = tcp_conn_rx.lock().await;
     //let mut tcp_conn_config_rx = tcp_conn_config_rx.lock().await;
 
-    let mut save_path :&str = "/home/trevor/Documents/TestDir3";
+    let mut save_path :&str = "/home/zmanjaroschool/TestDir3";
 
     while cmd.is_running(&mut || error_conn_tx.mark_closed() && tcp_conn_rx.is_closed_and_empty() /* && tcp_conn_config_rx.is_closed_and_empty() */) {
         //let clean = await_for_all!(cmd.wait_avail(&mut tcp_conn_rx, 1)    );
@@ -69,13 +69,13 @@ async fn internal_behavior<C: SteadyCommander>(
         } */
         
         match cmd.try_take(&mut tcp_conn_rx) {
-            Some(stream) => {
+            Some(mut stream) => {
                 println!("(tcp_worker) Successfully forwarded connection from tcp_listener to tcp_worker.");
                 println!("(tcp_worker) New client's address: {:?}", stream.peer_addr()?);
-                loop {
-                    let _ = handle_client::processing(&stream, &save_path).await;
-                    cmd.relay_stats();
-                }
+                // loop {
+                let _ = handle_client::processing(stream, &save_path, &mut cmd).await;
+                // cmd.relay_stats();
+                // }
             },
             None => {
                 /* if clean {
