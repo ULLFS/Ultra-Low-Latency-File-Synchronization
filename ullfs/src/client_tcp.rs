@@ -134,3 +134,46 @@ pub async fn write_delta_to_connection(delta: &fileDifs::Delta, filepath: &str, 
                         
     // }
 }
+
+pub async fn write_deletion_to_connection(filepath: &str, stream: &mut TcpStream){
+    let base_path = fileFilter::Filter::get_instance().get_base_dir();
+    let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
+    println!("Sending delete for: {}", relative_path);
+    let mut relative_path_bytes = relative_path.into_bytes();
+    relative_path_bytes.push(0b0000);
+    relative_path_bytes.push(4u8);
+    stream.write(&relative_path_bytes).await;
+
+}
+pub async fn write_move_to_connection(filepath_old: &str, filepath_new: &str, stream: &mut TcpStream){
+    let base_path = fileFilter::Filter::get_instance().get_base_dir();
+    let relative_path_old = filepath_old.replace(base_path, ""); // Removing base path from the file path to get relative path
+    let relative_path_new = filepath_new.replace(base_path, "");
+    let mut relative_path_bytes = relative_path_old.into_bytes();
+    relative_path_bytes.push(0b0000);
+    relative_path_bytes.push(3u8);
+    stream.write(&relative_path_bytes).await;
+    let mut new_path_bytes = relative_path_new.into_bytes();
+    new_path_bytes.push(0b0000);
+    stream.write(&new_path_bytes).await;
+
+
+}
+pub async fn write_create_dir_to_connection(dirpath: &str, stream: &mut TcpStream){
+    let base_path = fileFilter::Filter::get_instance().get_base_dir();
+    let relative_path_old = dirpath.replace(base_path, ""); // Removing base path from the file path to get relative path
+    // let relative_path_new = filepath_new.replace(base_path, "");
+    let mut relative_path_bytes = relative_path_old.into_bytes();
+    relative_path_bytes.push(0b0000);
+    relative_path_bytes.push(6u8);
+    stream.write(&relative_path_bytes);
+}
+pub async fn write_create_file_to_connection(filepath: &str, stream: &mut TcpStream){
+    let base_path = fileFilter::Filter::get_instance().get_base_dir();
+    let relative_path_old = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
+    // let relative_path_new = filepath_new.replace(base_path, "");
+    let mut relative_path_bytes = relative_path_old.into_bytes();
+    relative_path_bytes.push(0b0000);
+    relative_path_bytes.push(5u8);
+    stream.write(&relative_path_bytes);
+}
