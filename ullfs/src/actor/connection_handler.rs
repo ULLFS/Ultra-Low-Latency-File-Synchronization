@@ -162,7 +162,7 @@ async fn internal_behavior <C: SteadyCommander>(
             }
         }
         
-        sleep(Duration::from_secs(300)).await;
+        sleep(Duration::from_secs(10)).await;
         // }
     }
     Ok(())

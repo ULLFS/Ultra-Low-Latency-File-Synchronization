@@ -1,7 +1,7 @@
 use std::{collections::HashMap, error::Error, sync::{Arc, Mutex}};
 use steady_state::*;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
-use crate::{client_tcp, fileDifs,Args, TcpChannel};
+use crate::{client_tcp, fileDifs::{self, FileData},Args, TcpChannel};
 use super::ebpf_listener::RuntimeState;
 
 async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
@@ -23,6 +23,9 @@ async fn read_streams <C: SteadyCommander>(
         let mut buf: Vec<u8> = Vec::new();
         let lost_connection: bool = match stream.try_read(&mut buf) {
             Ok(x) => {
+                if(x != 0) {
+                    println!("Received a stream to resend")
+                }
                 for byte in buf{
                     let name = name.clone();
                     if byte == 0b0000 {
@@ -30,6 +33,7 @@ async fn read_streams <C: SteadyCommander>(
                         let val = map_filenames.get(&name);
                         match val {
                             Some(x) => {
+                                println!("resending: {}", name);
                                 resend_file(x, stream, name).await;
                             }
                             None =>{}
@@ -139,6 +143,7 @@ async fn internal_behavior <C: SteadyCommander>(
                     filemanager.add_file(file.to_string());
                     for (stream, name) in &mut vec_tcp_streams {
                         println!("Writing full file to connection: {}", name);
+                        
                         client_tcp::write_full_file_to_connection(&file, stream).await;
                     }
                 }

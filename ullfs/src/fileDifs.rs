@@ -1,4 +1,4 @@
-use std::{fs::{self}, io::{BufReader, Read}};
+use std::{fs::{self}, io::{BufReader, Read}, ops::Add};
 // use bytes::Bytes;
 use serde_json::Value;
 use xxhash_rust::xxh3::{xxh3_64, Xxh3};
@@ -37,8 +37,8 @@ impl Delta {
 pub struct FileData{
     file_map: RwLock<HashMap<String, File>>,
     file_store_time: u32,
-    max_total_size: u32,
-    cur_total_size: u32
+    max_total_size: u64,
+    cur_total_size: RwLock<u64>
 }
 impl FileData {
     fn new<'a>() -> Self {
@@ -56,14 +56,14 @@ impl FileData {
                 panic!("Error: config.json structure damaged.\n{}", e);
             }
         }; 
-        let file_store_time: u32 = match conf["file_store_time_minutes"].as_u64(){
+        let file_store_time = match conf["file_store_time_minutes"].as_u64(){
             Some(x) =>x as u32,
             None => {
                 panic!("Error: file_store_time_minutes did not exist in config.json or was not an integer.");
             }
         };
-        let max_total_size: u32 = match conf["max_total_size_mb"].as_u64(){
-            Some(x) => x as u32,
+        let max_total_size = match conf["max_total_size_mb"].as_u64(){
+            Some(x) => x,
             None => {
                 panic!("Error: max_total_size_gb did not exist in config.json or was not an integer.");
             }
@@ -75,7 +75,7 @@ impl FileData {
             file_map: RwLock::new(map),
             file_store_time: file_store_time,
             max_total_size: max_total_size,
-            cur_total_size: 0
+            cur_total_size: RwLock::new(0)
         }
     }
     pub fn get_instance() -> &'static FileData{
@@ -89,8 +89,25 @@ impl FileData {
         
     // }
     pub fn add_file(&self, filepath: String) {
-        let mut files = self.file_map.write();
-        
+        let mut file_map_lock = self.file_map.write().unwrap();
+        let mut file = match fs::File::open(&filepath) {
+            Ok(x) => x,
+            Err(_) => return
+        };
+        let mut size_lock = self.cur_total_size.write().unwrap();
+
+        if file.metadata().unwrap().len() <= (self.max_total_size - *size_lock) {
+            // size_lock += file.metadata().unwrap().len();
+            size_lock.add(file.metadata().unwrap().len());
+
+        } else {
+            // Not enough space left
+            return;
+        }
+        let mut file_data: Vec<u8> = Vec::new();
+        file.read_to_end(&mut file_data);
+        let f = File::new(file_data, self.file_store_time);
+        file_map_lock.insert(filepath, f);
     }
     pub fn clean_ram(&self, minutes_passed: u32) -> bool{
         let mut files = match self.file_map.try_write() {
