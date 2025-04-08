@@ -131,8 +131,33 @@ async fn extract_filename(
     corrected_path
 }
 
+pub async fn ullfs_write(filepath: String){
+    println!("File written: {}", filepath);
+}
 
+pub async fn ullfs_create_dir(filepath: String){
+    println!("Directory created: {}", filepath);
+}
 
+pub async fn ullfs_create_file(filepath: String){
+    println!("File created: {}", filepath);
+}
+
+pub async fn ullfs_delete(filepath: String){
+    println!("File|Directory {} deleted", filepath);
+}
+
+pub async fn ullfs_rename(filepath_from: String, filepath_to: String){
+    println!("File renamed from {} to {}", filepath_from, filepath_to);
+}
+
+pub async fn ullfs_move(filepath_from: String, filepath_to: String){
+    println!("File|Directory Moved {} to {}", filepath_from, filepath_to);
+}
+
+pub async fn ullfs_move_into_watch(filepath: String){
+    println!("File|Directory Moved into watch directory [Send all] {}", filepath);
+}
 
 pub async fn run(context: SteadyContext
     ,transmitter: SteadyTx<String>
@@ -256,11 +281,11 @@ async fn internal_behavior<C: SteadyCommander>(
                             second_inode_num = second_temp_inode_num;
                         }
 
-                        if DEBUG {
+                        if(DEBUG){
                             print!("{} ",inode_num);
                         }
 
-                        if DEBUG {
+                        if(DEBUG){
                             match data {
                                 // Primary programs
                                 0  => println!("path_unlink"),
@@ -315,6 +340,9 @@ async fn internal_behavior<C: SteadyCommander>(
                         if(data == 18){
                             let second_corrected_path: String = extract_filename(second_total_len as usize, second_s_buf_clone.clone(), cpu_id as usize).await;
 
+                            println!("{}", corrected_path);
+                            println!("{}", second_corrected_path);
+
                             if(rename_data == 1){
     
                                 // Split the path into components, ignoring empty parts.
@@ -340,6 +368,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
                                     base_path = second_corrected_path;
                                 }
+
                                 else{
                                     //Default
                                     check_inode = true;
@@ -352,20 +381,19 @@ async fn internal_behavior<C: SteadyCommander>(
                                 // println!("Original: {} -> Parent: {}", corrected_path, parent);
                             }
                             else if (rename_data == 2) {
-                                println!("Moved In {}", second_corrected_path);
+                                // println!("Moved In {}", second_corrected_path);
                                 check_inode = true;
                                 mode = 6;
                                 // inode_num = second_inode_num;
                                 temp_path = corrected_path.clone();
 
                                 base_path = second_corrected_path;
-                                file_written(second_corrected_path);
                                 //Moved out of watch dir [Delete]
                             }
                             else if (rename_data == 3) {
                                 //println!("Moved Out [Deleted] {}", corrected_path);
-                                println!("File|Directory {} Deleted", corrected_path);
-                                deleted_thing(corrected_path);
+                                // println!("File|Directory {} Deleted", corrected_path);
+                                ullfs_delete(corrected_path.clone()).await;
                                 return_path = corrected_path.clone();
                                 //Moved into watch dir [Send file/all subfiles]
                             }
@@ -397,9 +425,9 @@ async fn internal_behavior<C: SteadyCommander>(
 
                         //vfs_write
                         if(data == 29){
-                            println!("Write at {}", corrected_path);
+                            // println!("Write at {}", corrected_path);
+                            ullfs_write(corrected_path.clone()).await;
                             return_path = corrected_path.clone();
-                            file_written(corrected_path);
                         }
 
                         //path_rmdir or inode_rmdir
@@ -415,12 +443,12 @@ async fn internal_behavior<C: SteadyCommander>(
                     // ========================================
 
                     if(check_inode){
-                        if block_addr == inode_num {
+                        if(block_addr == inode_num){
                             continue;
                         }
     
                         let dir_str: &str = &arc_w_dir_clone;
-                        if base_path.is_empty() {
+                        if(base_path.is_empty()){
                             base_path = dir_str.to_string();
                         }
                         else{
@@ -455,51 +483,79 @@ async fn internal_behavior<C: SteadyCommander>(
                                     relative_path.insert(0, '/');
                                 }
 
-                                return_path = relative_path.clone();
+                                // let t_p: String = temp_path.replace("¦", "");
+                                // relative_path = relative_path.replace("¦", "");
+
+                                // return_path = relative_path.clone();
                                 match mode {
-                                    1 => println!("File {} renamed to {}", temp_path, relative_path),
-                                    2 => println!("File {} created", relative_path),
-                                    3 => println!("Directory {} created", relative_path),
+                                    1 => {
+                                        // println!("File {} renamed to {}", temp_path, relative_path);
+                                        ullfs_rename(temp_path, relative_path).await;
+                                    },
+                                    2 => {
+                                        // println!("File {} created", relative_path);
+                                        ullfs_create_file(relative_path).await;
+                                    },
+                                    3 => {
+                                        // println!("Directory {} created", relative_path);
+                                        ullfs_create_dir(relative_path).await;
+                                    },
                                     4 => println!("errr"),
-                                    5 => println!("File|Directory Moved {} to {}", temp_path, relative_path),
-                                    6 => println!("File|Directory Moved into watch directory [Send all] {}", relative_path),
+                                    5 => {
+                                        // println!("File|Directory Moved {} to {}", temp_path, relative_path);
+                                        ullfs_move(temp_path, relative_path).await;
+                                    },
+                                    6 => {
+                                        // println!("File|Directory Moved into watch directory [Send all] {}", relative_path);
+                                        ullfs_move_into_watch(relative_path).await;
+                                    },
                                     _ => (),
                                 }
 
-                                match mode {
-                                    1 | 5 => {
-                                        arg1 = temp_path.clone(); 
-                                        arg2 = relative_path.clone();
-                                    },
-                                    2 | 3 | 6 => arg1 = relative_path.clone(),
-                                    _ => (),
-                                }
+                                // match mode {
+                                //     1 | 5 => {
+                                //         arg1 = temp_path.clone(); 
+                                //         arg2 = relative_path.clone();
+                                //     },
+                                //     2 | 3 | 6 => arg1 = relative_path.clone(),
+                                //     _ => (),
+                                // }
                                 // Do something with the found path
                                 // println!("Found file with inode {}: {:?}", inode_num, file_path);
                             },
                             None => {
-                                println!("DEBUG: return_path has been set to: '{}'", return_path);
-                                return_path = temp_path.clone();
+                                // println!("DEBUG: return_path has been set to: '{}'", return_path);
+                                // return_path = temp_path.clone();
+
+                                // temp_path = temp_path.replace("¦", "");
+                                // base_path = base_path.replace("¦", "");
+
                                 match mode {
-                                    1 => println!("File|Directory {} deleted", temp_path),
+                                    1 => {
+                                        // println!("File|Directory {} deleted", temp_path);
+                                        ullfs_delete(temp_path).await;
+                                    },
                                     2 => println!("Something Weird Happened {} bp {}",temp_path, base_path),
                                     3 => println!("Something Weird Happened [dir]{} bp {}", temp_path, base_path),
-                                    4 => println!("Directory {} deleted [rmdir]", temp_path),
+                                    4 => {
+                                        // println!("Directory {} deleted [rmdir]", temp_path);
+                                        ullfs_delete(temp_path).await;
+                                    },
                                     5 => println!("Something"),
                                     6 => println!("Something else"),
                                     _ => (),
                                 }
-                                match mode {
-                                    // 2 | 3 => {
-                                    //     arg1 = temp_path.clone(); 
-                                    //     arg2 = base_path.clone();
-                                    // },
-                                    1 | 4 => {
-                                        arg1 = temp_path.clone();
-                                        return_path = temp_path.clone();
-                                    },
-                                    _ => (),
-                                }
+                                // match mode {
+                                //     // 2 | 3 => {
+                                //     //     arg1 = temp_path.clone(); 
+                                //     //     arg2 = base_path.clone();
+                                //     // },
+                                //     1 | 4 => {
+                                //         arg1 = temp_path.clone();
+                                //         return_path = temp_path.clone();
+                                //     },
+                                //     _ => (),
+                                // }
                                 // Handle case where no file with matching inode was found
                                 // println!("No file found with inode {}", inode_num);
                             }
@@ -517,24 +573,26 @@ async fn internal_behavior<C: SteadyCommander>(
                     // arg1
                     // arg2
                     // return_path
-                    if return_path.starts_with('/') {
-                        return_path.remove(0);
-                    }
-                    let final_path = String::from(filter.get_base_dir()) + return_path.as_str();
-                    let should_filter = filter.should_filter(final_path.as_str());
 
-                    if(DEBUG){
-                        println!("FINALPATH {}", final_path);
-                        println!("RETURNPATH {}", return_path);
-                        println!("Arg1 {}", return_path);
-                    }
+
+                    // if return_path.starts_with('/') {
+                    //     return_path.remove(0);
+                    // }
+                    // let final_path = String::from(filter.get_base_dir()) + return_path.as_str();
+                    // let should_filter = filter.should_filter(final_path.as_str());
+
+                    // if(DEBUG){
+                    //     println!("FINALPATH {}", final_path);
+                    //     println!("RETURNPATH {}", return_path);
+                    //     println!("Arg1 {}", return_path);
+                    // }
                     
 
-                    // Extract deltas
-                    if (!should_filter) {
-                        // send_full_contents_of_file_tcp(final_path.as_str());
-                        //client_tcp::write_full_file_to_connections(final_path.as_str());
-                    }
+                    // // Extract deltas
+                    // if (!should_filter) {
+                    //     // send_full_contents_of_file_tcp(final_path.as_str());
+                    //     //client_tcp::write_full_file_to_connections(final_path.as_str());
+                    // }
 
                     // //Events
                 }
@@ -547,6 +605,7 @@ async fn internal_behavior<C: SteadyCommander>(
     println!("Exiting");
     Ok(())
 }
+
 pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
     // ========================================
     // =              INIT EBPF               =
@@ -607,18 +666,18 @@ pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
     ];
 
     let fexit_programs = [
-        "vfs_iter_write",
-        "vfs_mkdir",
-        "vfs_mknod",
-        "vfs_mkobj",
+        // "vfs_iter_write",
+        // "vfs_mkdir",
+        // "vfs_mknod",
+        // "vfs_mkobj",
 
-        "vfs_open",
-        "vfs_read",
-        "vfs_rename",
-        "vfs_rmdir",
-        "vfs_truncate",
+        // "vfs_open",
+        // "vfs_read",
+        // "vfs_rename",
+        // "vfs_rmdir",
+        // "vfs_truncate",
         "vfs_write",
-        "vfs_writev",
+        // "vfs_writev",
     ];
 
     // Attach each program.
