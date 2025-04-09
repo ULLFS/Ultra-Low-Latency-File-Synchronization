@@ -165,6 +165,10 @@ pub async fn ullfs_create_file(filepath: String, tx: &mut Sender<TcpData>){
     tx.send(data).await;
 }
 
+pub async fn ullfs_create_unknown(filepath: String){
+    println!("File|Directory created: {}", filepath);
+}
+
 pub async fn ullfs_delete(filepath: String, tx: &mut Sender<TcpData>){
     let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::delete };
 
@@ -280,6 +284,7 @@ async fn internal_behavior<C: SteadyCommander>(
                     let mut rename_data: u8 = 0;
                     let mut check_inode: bool = false;
                     let mut is_dir: bool = false;
+                    let mut is_file: bool = false;
                     let mut temp_path: String = String::new();
                     let mut base_path: String = String::new();
                     let mut return_path: String = String::new();
@@ -291,6 +296,7 @@ async fn internal_behavior<C: SteadyCommander>(
                     //4 is rmdir
                     //5 is move
                     //6 is move in from outside watchdir
+                    //7 is create unknown if file or dir
                     let mut mode: u8 = 0;
                     let mut arg1: String = String::new();
                     let mut arg2: String = String::new();
@@ -361,6 +367,8 @@ async fn internal_behavior<C: SteadyCommander>(
                                 28 => println!("vfs_truncate"),
                                 29 => println!("vfs_write"),
                                 30 => println!("vfs_writev"),
+
+                                31 => println!("inode_setattr"),
                         
                                 // Fallback for invalid indices.
                                 _  => println!("Invalid function index: {}", data),
@@ -372,12 +380,12 @@ async fn internal_behavior<C: SteadyCommander>(
                         // ========================================
 
                         let corrected_path: String = extract_filename(total_len as usize, s_buf_clone.clone(), cpu_id as usize).await;
+                        println!("{}", corrected_path);
 
                         //inode_rename
                         if(data == 18){
                             let second_corrected_path: String = extract_filename(second_total_len as usize, second_s_buf_clone.clone(), cpu_id as usize).await;
 
-                            println!("{}", corrected_path);
                             println!("{}", second_corrected_path);
 
                             if(rename_data == 1){
@@ -446,6 +454,7 @@ async fn internal_behavior<C: SteadyCommander>(
                         }
                         //path_mknod or inode_create
                         if(data == 3 || data == 11){
+                            is_file = true;
                             base_path = corrected_path.clone();
                         }
                         //d_instantiate
@@ -453,8 +462,12 @@ async fn internal_behavior<C: SteadyCommander>(
                             if(is_dir){
                                 mode = 3;
                             }
-                            else{
+                            else if (is_file){
                                 mode = 2;
+                            }
+                            else{
+                                base_path = corrected_path.clone();
+                                mode = 7;
                             }
                             check_inode = true;
                             temp_path = corrected_path.clone();
@@ -465,6 +478,12 @@ async fn internal_behavior<C: SteadyCommander>(
                             // println!("Write at {}", corrected_path);
                             ullfs_write(corrected_path.clone(), &mut tx).await;
                             return_path = corrected_path.clone();
+                        }
+
+                        //inode_setattr
+                        if(data == 31){
+                            // println!("inoSetAtt {}", corrected_path);
+                            ullfs_write(corrected_path.clone(), &mut tx).await;
                         }
 
                         //path_rmdir or inode_rmdir
@@ -546,6 +565,10 @@ async fn internal_behavior<C: SteadyCommander>(
                                         // println!("File|Directory Moved into watch directory [Send all] {}", relative_path);
                                         ullfs_move_into_watch(relative_path, &mut tx).await;
                                     },
+                                    7 => {
+                                        // println!("File|Directory Moved into watch directory [Send all] {}", relative_path);
+                                        ullfs_create_unknown(relative_path).await;
+                                    },
                                     _ => (),
                                 }
 
@@ -580,6 +603,7 @@ async fn internal_behavior<C: SteadyCommander>(
                                     },
                                     5 => println!("Something"),
                                     6 => println!("Something else"),
+                                    7 => println!("Not sure"),
                                     _ => (),
                                 }
                                 // match mode {
@@ -732,6 +756,7 @@ pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
         "inode_rmdir",
         "inode_mknod",
         "inode_rename",
+        "inode_setattr",
         
         "d_instantiate",
     ];
@@ -756,9 +781,9 @@ pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
         attach_program(&mut bpf, prog)?;
     }
 
-    for prog in &fexit_programs {
-        attach_program_fexit(&mut bpf, prog)?;
-    }
+    // for prog in &fexit_programs {
+    //     attach_program_fexit(&mut bpf, prog)?;
+    // }
 
     // ========================================
     // =              INIT EBPF               =

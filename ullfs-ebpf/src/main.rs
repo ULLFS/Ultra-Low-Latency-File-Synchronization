@@ -281,6 +281,17 @@ pub fn d_instantiate(ctx: LsmContext) -> i32 {
     0i32
 }
 
+
+#[lsm(hook = "inode_setattr")]
+pub fn inode_setattr(ctx: LsmContext) -> i32 {
+    match unsafe { try_arg_dentry(ctx, 1, 31) } {
+        Ok(_) => {},
+        Err(_) => {},
+    }
+    0i32
+}
+
+
 fn try_arg_file(ctx: LsmContext, path_arg_pos: u8,calltype: u8) -> Result<(), i64> {
     unsafe{
         let file: *const vmlinux::file = ctx.arg(path_arg_pos as usize);
@@ -352,13 +363,13 @@ fn try_arg_inode_dentry(ctx: LsmContext, inode_arg_pos: u8, dent_arg_pos: u8, ca
         // let inode: *const vmlinux::inode = bpf_probe_read_kernel(&(*dent).d_inode)?;
         let inode_num: u64 = bpf_probe_read_kernel(&(*inode).i_ino)?;
 
-        // let len = pathToMap(dent,&BUF, 20, ctx, *dir_inode);
+        let len = pathToMap(dent,&BUF, 50, &ctx, *dir_inode);
         let event_data = EventData {
-            event_type: calltype,   // Example event type (you can change it based on your use case)
-            len: 0, // Existing length value, cast to u16
             inod: inode_num,
-            len2: 0u16,
             inod2: 0u64,
+            len: len as u16, // Existing length value, cast to u16
+            len2: 0u16,
+            event_type: calltype,   // Example event type (you can change it based on your use case)
             rename_state: 0u8,
         };
         //EVENTS.output(ctx, &(len as u16), 0);
