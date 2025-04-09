@@ -50,6 +50,7 @@ async fn full_file<R: AsyncRead + Unpin>(
     }
     Ok(())
 }
+
 async fn read_null_terminated_string<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<String> {
     let mut buf = Vec::new();
     let mut byte = [0u8];
@@ -61,6 +62,7 @@ async fn read_null_terminated_string<R: AsyncRead + Unpin>(reader: &mut R) -> io
     }
     String::from_utf8(buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
 }
+
 async fn delta_file<R: AsyncRead + Unpin>(
     path: &str,
     start: u64,
@@ -72,10 +74,12 @@ async fn delta_file<R: AsyncRead + Unpin>(
 ) -> io::Result<()> {
     let global_path = create_global_path(save_path, path);
     let path = Path::new(&global_path);
+    
     println!(
         "[delta] {}: bytes {}-{} (len {}) hash={}",
         path.display(), start, end, length, hash
     );
+
     // let path_dir = path.parent();
     match path.parent() {
         Some(x) => {
@@ -85,7 +89,9 @@ async fn delta_file<R: AsyncRead + Unpin>(
         }
         None => {}
     };
+
     let path_temp = global_path.to_string() + ".temp";
+
     let hash_correct = {
         let mut file_reader = fs::File::open(&path).expect("failed to open file");
         let mut sbuf = Vec::new();
@@ -93,6 +99,7 @@ async fn delta_file<R: AsyncRead + Unpin>(
         let hash_val = xxh3_64(&mut sbuf);
         hash_val == hash
     };
+
     let mut cur_read = 0;
     // let mut temp_writer = None;
 
@@ -108,6 +115,7 @@ async fn delta_file<R: AsyncRead + Unpin>(
         } else {
             seek_num = end;     
         }
+
         // file_reader.seek(SeekFrom::Start(seek_num)).expect("failed to seek");
         let mut temp_writer = fs::File::create(&path_temp).expect("Failed to create file");
         println!("Created tempwriter and will be reading: {}", start - 1);
@@ -119,6 +127,8 @@ async fn delta_file<R: AsyncRead + Unpin>(
             file_reader.read_exact(&mut arr).expect("Failed to read from the reader");
             temp_writer.write(&arr).expect("Failed to write to temp file");
         }
+
+
         // Then read the data from the stream
         println!("Reading stream data for: {}", length);
         while cur_read < length {
@@ -131,6 +141,7 @@ async fn delta_file<R: AsyncRead + Unpin>(
             temp_writer.write(&arr).expect("Failed to write data");
             
         }
+
         // Then seek to the proper position and write the rest of the file
         file_reader.seek(SeekFrom::Start(seek_num)).expect("Failed to seek");
         let mut cur_read_file = seek_num;
@@ -143,6 +154,7 @@ async fn delta_file<R: AsyncRead + Unpin>(
             file_reader.read_exact(&mut arr).expect("Failed to read from the reader");
             temp_writer.write(&arr).expect("Failed to write to temp file");
         }
+
         // temp_writer = writer;/
         // Only let us write if it isn't none
         // Let's write to the start value:
@@ -165,8 +177,6 @@ async fn delta_file<R: AsyncRead + Unpin>(
         println!("Hash incorrect!");
     }
     
-    
-    
     // stream_data(&path, length, reader).await
     Ok(())
 }
@@ -186,6 +196,7 @@ pub async fn processing<C: SteadyCommander>(mut stream: TcpStream, save_path : &
     }
     
 }
+
 pub async fn decode_stream<R: AsyncRead + Unpin + Send>(
     mut reader: R,
     save_path: &str

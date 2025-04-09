@@ -112,6 +112,7 @@ async fn internal_behavior<C: SteadyCommander>(
             //let _clean = await_for_all!(cmd.wait_vacant_units(&mut tcp_conn_tx, 1024));
             println!("(tcp_listener) Attemping to forward the connection over to the tcp_worker");
             let _done = cmd.send_async(&mut tcp_conn_tx, stream, SendSaturation::IgnoreAndWait).await;
+            cmd.relay_stats();
         }
             
     //} else {

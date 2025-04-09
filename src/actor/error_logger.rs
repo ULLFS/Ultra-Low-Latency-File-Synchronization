@@ -26,15 +26,14 @@ pub(crate) struct ErrorMessage {
 pub async fn run(context: SteadyContext
         , tcp_listener_rx: SteadyRx<ErrorMessage>
         , tcp_worker_rx: SteadyRx<ErrorMessage>
-        //, config_checker_rx: SteadyRx<ErrorMessage>
     ) -> Result<(),Box<dyn Error>> {
 
   // if needed CLI Args can be pulled into state from _cli_args
   let _cli_args = context.args::<Args>();
   // monitor consumes context and ensures all the traffic on the chosen channels is monitored
   // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-  let cmd =  into_monitor!(context, [tcp_listener_rx, tcp_worker_rx/*,  config_checker_rx */],[]);
-  internal_behavior(cmd, tcp_listener_rx, tcp_worker_rx/* , config_checker_rx */).await
+  let cmd =  into_monitor!(context, [tcp_listener_rx, tcp_worker_rx],[]);
+  internal_behavior(cmd, tcp_listener_rx, tcp_worker_rx).await
 }
 
 
@@ -42,21 +41,18 @@ async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C,
     tcp_listener_rx: SteadyRx<ErrorMessage>,
     tcp_worker_rx: SteadyRx<ErrorMessage>,
-    //config_checker_rx: SteadyRx<ErrorMessage>,
 ) -> Result<(), Box<dyn Error>> {
 
     let mut _buf = [0;BUFFER_SIZE];
 
-    //let mut config_conn_rx = config_conn_rx.lock().await;
     let mut tcp_listener_rx = tcp_listener_rx.lock().await;
     let mut tcp_worker_rx = tcp_worker_rx.lock().await;
-    //let mut config_checker_rx = config_checker_rx.lock().await;
 
 
     while cmd.is_running(&mut || tcp_listener_rx.is_closed_and_empty() && tcp_worker_rx.is_closed_and_empty() /* && config_checker_rx.is_closed_and_empty() */) {
         let clean = await_for_all!(cmd.wait_avail(&mut tcp_listener_rx,5)
                                         ,cmd.wait_avail(&mut tcp_worker_rx, 5)
-                                        /* ,cmd.wait_avail(&mut config_checker_rx, 5) */ );
+                                        );
 
         match cmd.try_take(&mut tcp_listener_rx) {
             Some(message) => {
@@ -81,18 +77,6 @@ async fn internal_behavior<C: SteadyCommander>(
                 }
             }
         }
-
-        /* match cmd.try_take(&mut config_checker_rx) {
-            Some(message) => {
-                error!("Error: {:?}", message);
-                cmd.relay_stats();
-            },
-            None => {
-                if clean {
-                    error!("internal error, should have found message");
-                }
-            }
-        } */
 
     }
     Ok(())
