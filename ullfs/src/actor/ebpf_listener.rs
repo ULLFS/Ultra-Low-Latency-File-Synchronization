@@ -13,7 +13,7 @@ use env_logger::filter;
 // use filehasher::hash_check;
 use steady_state::*;
 use tokio::fs::ReadDir;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Sender};
 use std::error::Error;
 use std::sync::Arc;
 use log::debug;
@@ -86,7 +86,21 @@ fn attach_program_fexit(bpf: &mut Ebpf, prog_name: &str) -> Result<()> {
 }
 
 type BufferType = PerCpuArray<aya::maps::MapData, [u8; 64]>;
+#[derive(Clone, Copy)]
+pub enum ChangeType {
+    write,
+    create_file,
+    create_dir,
+    delete,
+    move_fdir,
+    
 
+}
+pub struct TcpData {
+    pub filename: String,
+    pub old_filename: String,
+    pub change_type: ChangeType
+}
 async fn extract_filename(
     total_len: usize,
     s_buf_clone: Arc<BufferType>,
@@ -131,36 +145,56 @@ async fn extract_filename(
     corrected_path
 }
 
-pub async fn ullfs_write(filepath: String){
+pub async fn ullfs_write(filepath: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write};
+    
     println!("File written: {}", filepath);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_create_dir(filepath: String){
+pub async fn ullfs_create_dir(filepath: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::create_dir };
     println!("Directory created: {}", filepath);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_create_file(filepath: String){
+pub async fn ullfs_create_file(filepath: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::create_file };
+
     println!("File created: {}", filepath);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_delete(filepath: String){
+pub async fn ullfs_delete(filepath: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::delete };
+
     println!("File|Directory {} deleted", filepath);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_rename(filepath_from: String, filepath_to: String){
+pub async fn ullfs_rename(filepath_from: String, filepath_to: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::move_fdir };
+
     println!("File renamed from {} to {}", filepath_from, filepath_to);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_move(filepath_from: String, filepath_to: String){
+pub async fn ullfs_move(filepath_from: String, filepath_to: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::move_fdir };
+
     println!("File|Directory Moved {} to {}", filepath_from, filepath_to);
+    tx.send(data).await;
 }
 
-pub async fn ullfs_move_into_watch(filepath: String){
+pub async fn ullfs_move_into_watch(filepath: String, tx: &mut Sender<TcpData>){
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write };
+
     println!("File|Directory Moved into watch directory [Send all] {}", filepath);
+    tx.send(data).await;
 }
 
 pub async fn run(context: SteadyContext
-    ,transmitter: SteadyTx<String>
+    ,transmitter: SteadyTx<TcpData>
     ,state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
     // Call internal_behavior from here and do some initial setup:
@@ -187,12 +221,14 @@ pub async fn run(context: SteadyContext
 // #[tokio::main]
 async fn internal_behavior<C: SteadyCommander>(
     mut cmd: C, 
-    transmitter: SteadyTx<String>,
+    transmitter: SteadyTx<TcpData>,
     state: SteadyState<RuntimeState>,
 ) -> Result<(),Box<dyn Error>> {
     let mut state_guard = steady_state(&state, || RuntimeState::new(1)).await;
+    env_logger::init();
+
     let (mut bpf, block_addr, watch_dir_string) = setup_ebpf().await?;
-    
+    if let Some(mut _state) = state_guard.as_mut()
     {
         let mut perf_array = AsyncPerfEventArray::try_from(bpf.take_map("EVENTS").unwrap())?;
         let buf_array: PerCpuArray<_,[u8;64]> = match PerCpuArray::try_from(bpf.take_map("BUF").unwrap()){
@@ -213,7 +249,7 @@ async fn internal_behavior<C: SteadyCommander>(
         let second_s_buf = Arc::new(second_buf_array);
 
         let arc_w_dir = Arc::new(watch_dir_string);
-        let (tx, mut rx) = mpsc::channel(100);
+        let (tx_orig, mut rx) = mpsc::channel(100);
 
         for cpu_id in online_cpus().map_err(|(_, error)| error)? {
             // open a separate perf buffer for each cpu
@@ -223,6 +259,7 @@ async fn internal_behavior<C: SteadyCommander>(
             let second_s_buf_clone: Arc<PerCpuArray<aya::maps::MapData, [u8; 64]>> = Arc::clone(&second_s_buf);
 
             let arc_w_dir_clone = Arc::clone(&arc_w_dir);
+            let mut tx = tx_orig.clone();
             task::spawn(async move {
                 let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
 
@@ -393,7 +430,7 @@ async fn internal_behavior<C: SteadyCommander>(
                             else if (rename_data == 3) {
                                 //println!("Moved Out [Deleted] {}", corrected_path);
                                 // println!("File|Directory {} Deleted", corrected_path);
-                                ullfs_delete(corrected_path.clone()).await;
+                                ullfs_delete(corrected_path.clone(), &mut tx).await;
                                 return_path = corrected_path.clone();
                                 //Moved into watch dir [Send file/all subfiles]
                             }
@@ -426,7 +463,7 @@ async fn internal_behavior<C: SteadyCommander>(
                         //vfs_write
                         if(data == 29){
                             // println!("Write at {}", corrected_path);
-                            ullfs_write(corrected_path.clone()).await;
+                            ullfs_write(corrected_path.clone(), &mut tx).await;
                             return_path = corrected_path.clone();
                         }
 
@@ -490,24 +527,24 @@ async fn internal_behavior<C: SteadyCommander>(
                                 match mode {
                                     1 => {
                                         // println!("File {} renamed to {}", temp_path, relative_path);
-                                        ullfs_rename(temp_path, relative_path).await;
+                                        ullfs_rename(temp_path, relative_path, &mut tx).await;
                                     },
                                     2 => {
                                         // println!("File {} created", relative_path);
-                                        ullfs_create_file(relative_path).await;
+                                        ullfs_create_file(relative_path, &mut tx).await;
                                     },
                                     3 => {
                                         // println!("Directory {} created", relative_path);
-                                        ullfs_create_dir(relative_path).await;
+                                        ullfs_create_dir(relative_path, &mut tx).await;
                                     },
                                     4 => println!("errr"),
                                     5 => {
                                         // println!("File|Directory Moved {} to {}", temp_path, relative_path);
-                                        ullfs_move(temp_path, relative_path).await;
+                                        ullfs_move(temp_path, relative_path, &mut tx).await;
                                     },
                                     6 => {
                                         // println!("File|Directory Moved into watch directory [Send all] {}", relative_path);
-                                        ullfs_move_into_watch(relative_path).await;
+                                        ullfs_move_into_watch(relative_path, &mut tx).await;
                                     },
                                     _ => (),
                                 }
@@ -533,13 +570,13 @@ async fn internal_behavior<C: SteadyCommander>(
                                 match mode {
                                     1 => {
                                         // println!("File|Directory {} deleted", temp_path);
-                                        ullfs_delete(temp_path).await;
+                                        ullfs_delete(temp_path, &mut tx).await;
                                     },
                                     2 => println!("Something Weird Happened {} bp {}",temp_path, base_path),
                                     3 => println!("Something Weird Happened [dir]{} bp {}", temp_path, base_path),
                                     4 => {
                                         // println!("Directory {} deleted [rmdir]", temp_path);
-                                        ullfs_delete(temp_path).await;
+                                        ullfs_delete(temp_path, &mut tx).await;
                                     },
                                     5 => println!("Something"),
                                     6 => println!("Something else"),
@@ -599,18 +636,52 @@ async fn internal_behavior<C: SteadyCommander>(
                 // Ok::<_, PerfBufferError>(())
             });
         }
+        //{Index, Value, Flags}
+        let mut received_data = rx.recv().await;
+
+        let mut transmit_lock = transmitter.lock().await;
+
+        while cmd.is_running(&mut || transmit_lock.mark_closed()){
+            // This begins the weird translation between tokio and steady state
+            // It exists purely because Steady State does not work with Aya alone
+            // We needed multi transmitters and a single receiver.
+            // All those transmitters send there data here, which will then send off to other actors
+            // println!("{}", received_string);
+            let mut received_tcp_data = match received_data {
+                Some(x) => x,
+                None => {
+                    println!("Received none, end of receivers"); // Hopefully this code works
+                    break;
+                }
+            };
+            println!("Data Recieved: {}-{}", received_tcp_data.change_type as u8, received_tcp_data.filename);
+            match cmd.send_async(&mut transmit_lock, received_tcp_data, SendSaturation::IgnoreAndWait).await {
+                Ok(_) => {
+                    println!("Sent data");
+                },
+                Err(x) => {
+                    println!("Error on send_async: {}-{}", x.change_type as u8, x.filename);
+                }
+            };
+            cmd.relay_stats();
+            received_data = rx.recv().await;
+
+        }
     }
-    //{Index, Value, Flags}
-    let t = tokio::signal::ctrl_c().await;
-    println!("Exiting");
+    println!("Finished!");
+
+    // loop{}
+
     Ok(())
+    // let t = tokio::signal::ctrl_c().await;
+    // println!("Exiting");
+    // Ok(())
 }
 
 pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
     // ========================================
     // =              INIT EBPF               =
     // ========================================
-    env_logger::init();
     
     // Bump the memlock rlimit. This is needed for older kernels that don't use the
     // new memcg based accounting, see https://lwn.net/Articles/837122/

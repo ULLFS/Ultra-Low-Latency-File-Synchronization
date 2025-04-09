@@ -1,13 +1,17 @@
 use std::{collections::HashMap, error::Error, sync::{Arc, Mutex}};
+// use async_std::stream;
 use steady_state::*;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
-use crate::{client_tcp, fileDifs::{self, FileData},Args, TcpChannel};
-use super::ebpf_listener::RuntimeState;
+use crate::{actor::ebpf_listener::ChangeType, client_tcp::{self, write_create_dir_to_connection, write_create_file_to_connection, write_deletion_to_connection, write_move_to_connection}, fileDifs::{self, FileData}, fileFilter, Args, TcpChannel};
+use super::ebpf_listener::{RuntimeState, TcpData};
 
 async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
     println!("Resending File: {} to address: {}", file, name);
     client_tcp::write_full_file_to_connection(file, stream).await;
 }
+// fn create_full_filename(file: &String) -> String {
+//     let startDir = 
+// }
 
 async fn read_streams <C: SteadyCommander>(
     streams: &mut Vec<(TcpStream, String)>,
@@ -72,7 +76,7 @@ async fn read_streams <C: SteadyCommander>(
 }
 
 pub async fn run(context: SteadyContext,
-    ebpf_receiver: SteadyRx<String>,
+    ebpf_receiver: SteadyRx<TcpData>,
     tcp_receiver: SteadyRx<TcpChannel>,
     connection_handler_sender: SteadyTx<String>,
     state: SteadyState<RuntimeState>) -> Result<(),Box<dyn Error>>{
@@ -90,7 +94,7 @@ pub async fn run(context: SteadyContext,
 
 async fn internal_behavior <C: SteadyCommander>(
     mut cmd: C, 
-    ebpf_receiver: SteadyRx<String>,
+    ebpf_receiver: SteadyRx<TcpData>,
     tcp_receiver: SteadyRx<TcpChannel>,
     mut connection_handler_sender: SteadyTx<String>,
     state: SteadyState<RuntimeState>,
@@ -128,25 +132,65 @@ async fn internal_behavior <C: SteadyCommander>(
         read_streams(&mut vec_tcp_streams, &mut cmd, &mut map_filenames, &mut connection_handler_sender).await;
             
         match cmd.try_take(&mut ebpf_rx) {
-            Some(file) => {
-                println!("Received a file to send: {}", file);
-                let filemanager = fileDifs::FileData::get_instance();
-                if filemanager.contains_file(&file) {
-                    // Send the delta:
-                    let delta = filemanager.get_file_delta(&file);
-                    for ( stream, name) in &mut vec_tcp_streams {
-                        println!("Writing delta file to connection: {}", name);
-                        client_tcp::write_delta_to_connection(&delta, &file, stream).await;
-
+            Some(data) => {
+                // match data
+                println!("Data: {}-{}-{}", data.change_type as u8, data.filename, data.old_filename);
+                match data.change_type {
+                    ChangeType::create_dir => {
+                        for (stream, name) in &mut vec_tcp_streams {
+                            let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
+                            let filename = base_dir.to_string() + &data.filename;
+                            write_create_dir_to_connection(&filename, stream).await;
+                        }
                     }
-                } else {
-                    filemanager.add_file(file.to_string());
-                    for (stream, name) in &mut vec_tcp_streams {
-                        println!("Writing full file to connection: {}", name);
-                        
-                        client_tcp::write_full_file_to_connection(&file, stream).await;
+                    ChangeType::delete => {
+                        for (stream, name) in &mut vec_tcp_streams {
+                            let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
+                            let filename = base_dir.to_string() + &data.filename;
+                            write_deletion_to_connection(&filename, stream).await;
+                        }
+                    }
+                    ChangeType::create_file => {
+                        for (stream, name) in &mut vec_tcp_streams {
+                            let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
+                            let filename = base_dir.to_string() + &data.filename;
+                            write_create_file_to_connection(&filename, stream).await;
+                        }
+                    }
+                    ChangeType::move_fdir => {
+                        for (stream, name) in &mut vec_tcp_streams {
+                            let base_dir = fileFilter::Filter::get_instance().get_base_dir();
+                            let filename = base_dir.to_string() + &data.filename;
+                            let old_filename = base_dir.to_string() + &data.old_filename;
+                            write_move_to_connection(&old_filename, &filename, stream ).await;
+
+                        }
+                    }
+                    ChangeType::write => {
+                        let base_dir = fileFilter::Filter::get_instance().get_base_dir();
+                        let file = base_dir.to_string() + &data.filename;
+                        // let file = data.filename;
+                        println!("Received a file to send: {}", file);
+                        let filemanager = fileDifs::FileData::get_instance();
+                        if filemanager.contains_file(&file) {
+                            // Send the delta:
+                            let delta = filemanager.get_file_delta(&file);
+                            for ( stream, name) in &mut vec_tcp_streams {
+                                println!("Writing delta file to connection: {}", name);
+                                client_tcp::write_delta_to_connection(&delta, &file, stream).await;
+
+                            }
+                        } else {
+                            filemanager.add_file(file.to_string());
+                            for (stream, name) in &mut vec_tcp_streams {
+                                println!("Writing full file to connection: {}", name);
+                                
+                                client_tcp::write_full_file_to_connection(&file, stream).await;
+                            }
+                        }
                     }
                 }
+                
             }
             None => {}
         };
