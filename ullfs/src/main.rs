@@ -26,6 +26,7 @@ mod actor {
         pub mod tcp_sender;
         pub mod connection_handler;
 }
+// #[derive(PartialEq, Eq, Clone)]
 pub struct TcpChannel {
     stream: TcpStream,
     name: String

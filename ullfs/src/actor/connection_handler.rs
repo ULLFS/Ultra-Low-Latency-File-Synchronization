@@ -10,7 +10,7 @@ fn resend_data(input_data: Vec<u8>){
 }
 
 fn get_connection_addresses() -> (Vec<String>, String){
-    println!("Checking connections config");
+    // println!("Checking connections config");
     let conf_file : fs::File = match fs::File::open("./config.json"){
         Ok(x) => x,
         Err(e) => {
@@ -22,7 +22,7 @@ fn get_connection_addresses() -> (Vec<String>, String){
     let conf : Value = match serde_json::from_reader(reader){
         Ok(x) => x,
         Err(e) => {
-            panic!("Error: config.json structure damaged.\n{}", e);
+            panic!("Error: config.json structure damaged.\n{}",e);
         }
     };
     let port: String = conf["server_port"].as_str().expect("Failed to get port as string").to_string();
@@ -72,13 +72,13 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
         let stream_future = TcpStream::connect(address.to_string() + ":" + port.as_str());
         // Only allow 10 seconds for each connection to establish and if not established give up
         // This way we aren't waiting forever for a connection
-        println!("Starting timeout");
+        // println!("Starting timeout");
         let stream = match timeout(Duration::from_secs(10), stream_future).await {
             Ok(x) => {
                 match x {
                     Ok(e) => e,
                     Err(e) => {
-                        println!("Failed to connect to address: {}:{}, {}", address, port,e );
+                        // println!("Failed to connect to address: {}:{}, {}", address, port,e );
                         output.push(address);
                         continue;
                     }

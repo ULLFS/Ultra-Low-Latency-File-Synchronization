@@ -27,12 +27,12 @@ async fn internal_behavior <C: SteadyCommander>(
     state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
 
-    println!("Running ram cleaner!");
+    // println!("Running ram cleaner!");
     let mut num_minutes_passed = 1;
     while cmd.is_running(move || {
         return true; // I assume there is something else going on in is_running so using this instead of a loop
     }) {
-        sleep(Duration::from_secs(10)).await; // Hopefully this has no issues using tokio here
+        sleep(Duration::from_secs(60)).await; // Hopefully this has no issues using tokio here
         
         // Doesnt seem to
         // Sleep for 60 seconds

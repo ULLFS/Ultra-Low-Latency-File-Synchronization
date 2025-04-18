@@ -44,6 +44,14 @@ pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStrea
     //     }
     // }
     // println!("c.read complete");
+    let mut f = match fs::File::open(filepath){
+        Ok(x) => x,
+        Err(_) => {
+            // Skip me file not found
+            return;
+        }
+    };
+
     let base_path = fileFilter::Filter::get_instance().get_base_dir();
     let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
     let mut relative_path_bytes = relative_path.into_bytes();
@@ -62,25 +70,29 @@ pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStrea
     };
     
     let mut buf = [0u8; 1024];
-    let mut f = fs::File::open(filepath).expect(format!("File not found somehow: {}", filepath).as_str());
     let file_length = f.metadata().unwrap().len();
     println!("File length: {}", file_length);
     c.write(&file_length.to_le_bytes()).await.expect("Failed to write file length");
     // let mut reader = BufReader::new(f);
+    let mut total_written = 0;
     loop {
         let num_bytes = f.read(&mut buf).expect(format!("Failed to read file: {}", filepath).as_str());
-        match c.write(&buf[..num_bytes]).await{
+        if num_bytes == 0 {
+            break;
+        }
+        total_written += num_bytes;
+        match c.write_all(&buf[..num_bytes]).await{
             Ok(x) => x,
             Err(x) => {
                 // println!("Failed to write to connection: {} while writing file data. Error: {}", address, x);
                 return;
             }
         };
-        if num_bytes == 0 {
-            break;
-        }
+        // if num_bytes == 0 {
+        //     break;
+        // }
     }
-    println!("Finished writing");
+    println!("Finished writing, bytes written: {}", total_written);
 }
 pub async fn write_delta_to_connection(delta: &fileDifs::Delta, filepath: &str, stream: &mut TcpStream){
     // let mut addr = Connections::get_instance().await.addresses.write().unwrap();
@@ -169,7 +181,7 @@ pub async fn write_create_dir_to_connection(dirpath: &str, stream: &mut TcpStrea
     let mut relative_path_bytes = relative_path_old.into_bytes();
     relative_path_bytes.push(0b0000);
     relative_path_bytes.push(6u8);
-    stream.write(&relative_path_bytes);
+    stream.write(&relative_path_bytes).await;
 }
 pub async fn write_create_file_to_connection(filepath: &str, stream: &mut TcpStream){
     println!("Creating a file");
@@ -179,5 +191,5 @@ pub async fn write_create_file_to_connection(filepath: &str, stream: &mut TcpStr
     let mut relative_path_bytes = relative_path_old.into_bytes();
     relative_path_bytes.push(0b0000);
     relative_path_bytes.push(5u8);
-    stream.write(&relative_path_bytes);
+    stream.write(&relative_path_bytes).await;
 }

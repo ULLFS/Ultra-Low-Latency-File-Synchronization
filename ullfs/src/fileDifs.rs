@@ -134,9 +134,19 @@ impl FileData {
         let map = self.file_map.read().unwrap();
         map.contains_key(path)
     }
-    pub fn get_file_delta(&self, path : &str) -> Delta{
+    pub fn remove_file(&self, path: &str) {
+        let mut map = self.file_map.write().unwrap();
+        map.remove(path);
+    }
+    pub fn get_file_delta(&self, path : &str) -> Option<Delta,>{
         println!("{}", path);
-        let mut f = fs::File::open(&path).expect(format!("File not found {}", path).as_str());
+
+        let mut f = match fs::File::open(&path){
+            Ok(x) => x,
+            Err(e) => {
+                return None;
+            }
+        };
         let mut buf : Vec<u8> = Vec::new();
         let r = fs::File::read_to_end(&mut f, &mut buf);
         // println!("A");
@@ -163,7 +173,7 @@ impl FileData {
                 // let path_static: &'static str = Box::leak(Box::new(path.to_string()));
                 // let f_static : &'static mut File = Box::leak(Box::new(f));
                 map.insert(path.to_string(), f);
-                return Delta::new(0,0, data_clone, 0);
+                return Some(Delta::new(0,0, data_clone, 0));
                 
             }
         };
@@ -171,7 +181,7 @@ impl FileData {
         
         let f = File::new(buf, self.file_store_time);
         *map.get_mut(path).unwrap() = f;
-        return output_data;
+        return Some(output_data);
     }
 }
 // pub async fn hash_check(filepath: &str){

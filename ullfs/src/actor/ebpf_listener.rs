@@ -41,7 +41,7 @@ use std::os::unix::fs::MetadataExt; // For .ino() method on metadata.
 use std::path::PathBuf;
 use tokio::io;
 
-use crate::fileFilter;
+use crate::{fileDifs, fileFilter};
 const BATCH_SIZE: usize = 7000;
 
 #[derive(Copy, Clone)]
@@ -86,7 +86,7 @@ fn attach_program_fexit(bpf: &mut Ebpf, prog_name: &str) -> Result<()> {
 }
 
 type BufferType = PerCpuArray<aya::maps::MapData, [u8; 64]>;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ChangeType {
     write,
     create_file,
@@ -96,6 +96,7 @@ pub enum ChangeType {
     
 
 }
+#[derive(Clone, PartialEq, Eq)]
 pub struct TcpData {
     pub filename: String,
     pub old_filename: String,
@@ -159,20 +160,42 @@ pub async fn ullfs_create_dir(filepath: String, tx: &mut Sender<TcpData>){
 }
 
 pub async fn ullfs_create_file(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::create_file };
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write };
 
     println!("File created: {}", filepath);
     tx.send(data).await;
 }
 
-pub async fn ullfs_create_unknown(filepath: String){
+pub async fn ullfs_create_unknown(filepath: String, tx: &mut Sender<TcpData>){
     println!("File|Directory created: {}", filepath);
+    // TODO: Fix this so it detects filepath properly
+    let full_path = format!("{}/{}", fileFilter::Filter::get_instance().get_base_dir(), filepath);
+    
+    let path = Path::new(&full_path);
+    // ullfs_create_dir(filepath, tx).await;
+
+    if path.is_file() {
+        ullfs_create_file(filepath, tx).await;
+
+        // println!("'{}' is a file.", path_str);
+    } else if path.is_dir() {
+        ullfs_create_dir(filepath, tx).await;
+
+        // println!("'{}' is a directory.", path_str);
+    } else {
+        println!("'{}' does not exist or is not accessible.", full_path);
+    }
 }
+
 
 pub async fn ullfs_delete(filepath: String, tx: &mut Sender<TcpData>){
     let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::delete };
 
     println!("File|Directory {} deleted", filepath);
+    let dif_inst = fileDifs::FileData::get_instance();
+    dif_inst.remove_file(&filepath);
+    // dif_inst.clean_ram(minutes_passed)
+    
     tx.send(data).await;
 }
 
@@ -272,7 +295,7 @@ async fn internal_behavior<C: SteadyCommander>(
                     .collect::<Vec<_>>();
 
                 loop {
-                    let DEBUG = true;
+                    let DEBUG = false;
                     if(DEBUG){
                         println!("---EVENTS---");
                     }
@@ -471,6 +494,16 @@ async fn internal_behavior<C: SteadyCommander>(
                             }
                             check_inode = true;
                             temp_path = corrected_path.clone();
+
+                        }
+                        //inode_unlink
+                        if(data == 13){
+                            // rm command unlinks
+                            check_inode = true;
+                            mode = 4;
+                            temp_path = corrected_path.clone();
+                            // ullfs_delete(corrected_path.clone()).await;
+                            // return_path = corrected_path.clone();
                         }
 
                         //vfs_write
@@ -567,7 +600,7 @@ async fn internal_behavior<C: SteadyCommander>(
                                     },
                                     7 => {
                                         // println!("File|Directory Moved into watch directory [Send all] {}", relative_path);
-                                        ullfs_create_unknown(relative_path).await;
+                                        ullfs_create_unknown(relative_path, &mut tx).await;
                                     },
                                     _ => (),
                                 }
@@ -596,7 +629,11 @@ async fn internal_behavior<C: SteadyCommander>(
                                         ullfs_delete(temp_path, &mut tx).await;
                                     },
                                     2 => println!("Something Weird Happened {} bp {}",temp_path, base_path),
-                                    3 => println!("Something Weird Happened [dir]{} bp {}", temp_path, base_path),
+                                    3 => {
+                                        // If we see an issue here we fix that but so far this seems to always be create_dir
+                                        ullfs_create_dir(temp_path, &mut tx).await;
+                                        // println!("Something Weird Happened [dir]{} bp {}", temp_path, base_path)
+                                    },
                                     4 => {
                                         // println!("Directory {} deleted [rmdir]", temp_path);
                                         ullfs_delete(temp_path, &mut tx).await;
@@ -781,9 +818,9 @@ pub async fn setup_ebpf() -> Result<(Ebpf, u64, String), Box<dyn Error>>{
         attach_program(&mut bpf, prog)?;
     }
 
-    // for prog in &fexit_programs {
-    //     attach_program_fexit(&mut bpf, prog)?;
-    // }
+    for prog in &fexit_programs {
+        attach_program_fexit(&mut bpf, prog)?;
+    }
 
     // ========================================
     // =              INIT EBPF               =

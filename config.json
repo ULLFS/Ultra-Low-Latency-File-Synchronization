@@ -1,10 +1,11 @@
 {
-    "watch_dir":"/home/wtech/Documents/TestFolder/",
+    "watch_dir":"/home/zmanjaroschool/TestDir",
     "dns_web_addresses":[
-        "127.0.0.1"
+        "127.0.0.1",
+        "llfs.homiecourt.xyz"
     ],
     "server_port":"34254",
-    "ignore_ext":[".kate-swp"],
+    "ignore_ext":[".kate-swp", "¦"],
     "ignore": [
         
     ],
