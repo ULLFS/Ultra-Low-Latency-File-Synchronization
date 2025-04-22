@@ -1,7 +1,7 @@
 use args::Args;
-use aya::maps::{array, PerCpuArray, PerfEventArray};
+use aya::maps::PerCpuArray;
 use aya::Btf;
-use aya::programs::{FEntry, FExit, KProbe, Lsm};
+use aya::programs::{FExit, Lsm};
 use aya::util::online_cpus;
 use aya::Ebpf;
 use aya::{
@@ -9,15 +9,15 @@ use aya::{
     maps::Array,
 };
 //use client::send_full_contents_of_file_tcp;
-use env_logger::filter;
+// use env_logger::filter;
 // use filehasher::hash_check;
 use steady_state::*;
-use tokio::fs::ReadDir;
+// use tokio::fs::ReadDir;
 use tokio::sync::mpsc::{self, Sender};
 use std::error::Error;
 use std::sync::Arc;
 use log::debug;
-use std::{clone, fs};
+use std::fs;
 use std::process;
 use std::io::BufReader;
 use serde_json::{self, Value};
@@ -39,22 +39,22 @@ use std::path::Path;
 
 use std::os::unix::fs::MetadataExt; // For .ino() method on metadata.
 use std::path::PathBuf;
-use tokio::io;
+// use tokio::io;
 
 use crate::{fileDifs, fileFilter};
 const BATCH_SIZE: usize = 7000;
-
+const DEBUG: bool = false;
 #[derive(Copy, Clone)]
 pub(crate) struct RuntimeState {
-    value: u64,
-    buffer: [u8; BATCH_SIZE], // Use a byte buffer for TCP streams
+    _value: u64,
+    _buffer: [u8; BATCH_SIZE], // Use a byte buffer for TCP streams
 }
 
 impl RuntimeState {
     pub(crate) fn new(value: i32) -> Self {
         RuntimeState {
-            value: value as u64,
-            buffer: [0; BATCH_SIZE], // Initialize the byte buffer
+            _value: value as u64,
+            _buffer: [0; BATCH_SIZE], // Initialize the byte buffer
         }
     }
 }
@@ -88,11 +88,11 @@ fn attach_program_fexit(bpf: &mut Ebpf, prog_name: &str) -> Result<()> {
 type BufferType = PerCpuArray<aya::maps::MapData, [u8; 64]>;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ChangeType {
-    write,
-    create_file,
-    create_dir,
-    delete,
-    move_fdir,
+    Write, // Change a file (a file is written to)
+    _CreateFile, // This is currently unused for instead sending the full file
+    CreateDir, // Create a directory
+    Delete, // Delete file or directory
+    MoveFDir, // Move file or directory (or rename)
     
 
 }
@@ -147,23 +147,23 @@ async fn extract_filename(
 }
 
 pub async fn ullfs_write(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write};
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::Write};
     
     println!("File written: {}", filepath);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_create_dir(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::create_dir };
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::CreateDir };
     println!("Directory created: {}", filepath);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_create_file(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write };
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::Write };
 
     println!("File created: {}", filepath);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_create_unknown(filepath: String, tx: &mut Sender<TcpData>){
@@ -189,35 +189,35 @@ pub async fn ullfs_create_unknown(filepath: String, tx: &mut Sender<TcpData>){
 
 
 pub async fn ullfs_delete(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::delete };
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::Delete };
 
     println!("File|Directory {} deleted", filepath);
     let dif_inst = fileDifs::FileData::get_instance();
     dif_inst.remove_file(&filepath);
     // dif_inst.clean_ram(minutes_passed)
     
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_rename(filepath_from: String, filepath_to: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::move_fdir };
+    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::MoveFDir };
 
     println!("File renamed from {} to {}", filepath_from, filepath_to);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_move(filepath_from: String, filepath_to: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::move_fdir };
+    let data: TcpData = TcpData { filename: filepath_from.to_string(), old_filename: filepath_to.to_string(), change_type: ChangeType::MoveFDir };
 
     println!("File|Directory Moved {} to {}", filepath_from, filepath_to);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn ullfs_move_into_watch(filepath: String, tx: &mut Sender<TcpData>){
-    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::write };
+    let data: TcpData = TcpData { filename: filepath.to_string(), old_filename: String::new(), change_type: ChangeType::MoveFDir };
 
     println!("File|Directory Moved into watch directory [Send all] {}", filepath);
-    tx.send(data).await;
+    let _ = tx.send(data).await;
 }
 
 pub async fn run(context: SteadyContext
@@ -231,7 +231,7 @@ pub async fn run(context: SteadyContext
     println!("Ebpf listener active");
     // monitor consumes context and ensures all the traffic on the chosen channels is monitored
     // monitor and context both implement SteadyCommander. SteadyContext is used to avoid monitoring
-    let mut cmd = into_monitor!(context, [], [transmitter]);
+    let cmd = into_monitor!(context, [], [transmitter]);
     // while cmd.is_running(|| {
     //     true
     // })
@@ -288,46 +288,47 @@ async fn internal_behavior<C: SteadyCommander>(
             let arc_w_dir_clone = Arc::clone(&arc_w_dir);
             let mut tx = tx_orig.clone();
             task::spawn(async move {
-                let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
+                // let filter: &fileFilter::Filter = fileFilter::Filter::get_instance();
 
                 let mut buffers = (0..4)
                     .map(|_| BytesMut::with_capacity(4))
                     .collect::<Vec<_>>();
 
                 loop {
-                    let DEBUG = false;
-                    if(DEBUG){
+
+                    if DEBUG {
                         println!("---EVENTS---");
                     }
                     // wait for events
                     let event = buf.read_events(&mut buffers).await.unwrap();
                         
                     let mut inode_num: u64 = block_addr;
-                    let mut second_inode_num: u64 = block_addr;
-                    let mut rename_data: u8 = 0;
+                    // let mut second_inode_num: u64 = block_addr;
+                    let mut rename_data: u8 ;
                     let mut check_inode: bool = false;
                     let mut is_dir: bool = false;
                     let mut is_file: bool = false;
                     let mut temp_path: String = String::new();
                     let mut base_path: String = String::new();
+                    /*
                     let mut return_path: String = String::new();
-
-                    //0 is default
-                    //1 is rename
-                    //2 is d_instantiate file created
-                    //3 is d_instattiate dir created
-                    //4 is rmdir
-                    //5 is move
-                    //6 is move in from outside watchdir
-                    //7 is create unknown if file or dir
+                    0 is default
+                    1 is rename
+                    2 is d_instantiate file created
+                    3 is d_instattiate dir created
+                    4 is rmdir
+                    5 is move
+                    6 is move in from outside watchdir
+                    7 is create unknown if file or dir
+                    */
                     let mut mode: u8 = 0;
-                    let mut arg1: String = String::new();
-                    let mut arg2: String = String::new();
+                    // let mut arg1: String = String::new();
+                    // let mut arg2: String = String::new();
                     for i in 0..event.read {
                         let buf = &mut buffers[i];
 
                         let temp_inode_num: u64 = buf.get_u64_le();
-                        let second_temp_inode_num: u64 = buf.get_u64_le();
+                        // let second_temp_inode_num: u64 = buf.get_u64_le();
                         let total_len: u16 = buf.get_u16_le();
                         let second_total_len: u16 = buf.get_u16_le();
                         let data: u8 = buf.get_u8();
@@ -344,14 +345,14 @@ async fn internal_behavior<C: SteadyCommander>(
 
                         if block_addr != temp_inode_num{
                             inode_num = temp_inode_num;
-                            second_inode_num = second_temp_inode_num;
+                            // second_inode_num = second_temp_inode_num;
                         }
 
-                        if(DEBUG){
+                        if DEBUG {
                             print!("{} ",inode_num);
                         }
 
-                        if(DEBUG){
+                        if DEBUG {
                             match data {
                                 // Primary programs
                                 0  => println!("path_unlink"),
@@ -406,12 +407,12 @@ async fn internal_behavior<C: SteadyCommander>(
                         println!("{}", corrected_path);
 
                         //inode_rename
-                        if(data == 18){
+                        if data == 18{
                             let second_corrected_path: String = extract_filename(second_total_len as usize, second_s_buf_clone.clone(), cpu_id as usize).await;
 
                             println!("{}", second_corrected_path);
 
-                            if(rename_data == 1){
+                            if rename_data == 1 {
     
                                 // Split the path into components, ignoring empty parts.
                                 let parts: Vec<&str> = corrected_path
@@ -421,14 +422,15 @@ async fn internal_behavior<C: SteadyCommander>(
     
                                 // If there is more than one component, remove the last component and rebuild.
                                 // Otherwise, return an empty string.
-                                let parent = if parts.len() > 1 {
+                                let parent: String;
+                                if parts.len() > 1 {
                                     // Join all components except the last and prepend a '/'
-                                    format!("/{}", parts[..parts.len()-1].join("/"))
+                                    parent = format!("/{}", parts[..parts.len()-1].join("/"))
                                 } else {
-                                    "".to_string()
+                                    parent = "".to_string()
                                 };
                                 
-                                if(parent != second_corrected_path){
+                                if parent != second_corrected_path {
                                     //Move Action
                                     check_inode = true;
                                     mode = 5;
@@ -448,7 +450,7 @@ async fn internal_behavior<C: SteadyCommander>(
     
                                 // println!("Original: {} -> Parent: {}", corrected_path, parent);
                             }
-                            else if (rename_data == 2) {
+                            else if rename_data == 2 {
                                 // println!("Moved In {}", second_corrected_path);
                                 check_inode = true;
                                 mode = 6;
@@ -458,11 +460,11 @@ async fn internal_behavior<C: SteadyCommander>(
                                 base_path = second_corrected_path;
                                 //Moved out of watch dir [Delete]
                             }
-                            else if (rename_data == 3) {
+                            else if rename_data == 3 {
                                 //println!("Moved Out [Deleted] {}", corrected_path);
                                 // println!("File|Directory {} Deleted", corrected_path);
                                 ullfs_delete(corrected_path.clone(), &mut tx).await;
-                                return_path = corrected_path.clone();
+                                // return_path = corrected_path.clone();
                                 //Moved into watch dir [Send file/all subfiles]
                             }
                             else{
@@ -471,21 +473,21 @@ async fn internal_behavior<C: SteadyCommander>(
                         }
 
                         //path_mkdir or inode_mkdir
-                        if(data == 1 || data == 15){
+                        if data == 1 || data == 15{
                             is_dir = true;
                             base_path = corrected_path.clone();
                         }
                         //path_mknod or inode_create
-                        if(data == 3 || data == 11){
+                        if data == 3 || data == 11{
                             is_file = true;
                             base_path = corrected_path.clone();
                         }
                         //d_instantiate
-                        if(data == 19){
-                            if(is_dir){
+                        if data == 19{
+                            if is_dir {
                                 mode = 3;
                             }
-                            else if (is_file){
+                            else if is_file{
                                 mode = 2;
                             }
                             else{
@@ -497,7 +499,7 @@ async fn internal_behavior<C: SteadyCommander>(
 
                         }
                         //inode_unlink
-                        if(data == 13){
+                        if data == 13 {
                             // rm command unlinks
                             check_inode = true;
                             mode = 4;
@@ -507,20 +509,20 @@ async fn internal_behavior<C: SteadyCommander>(
                         }
 
                         //vfs_write
-                        if(data == 29){
+                        if data == 29 {
                             // println!("Write at {}", corrected_path);
                             ullfs_write(corrected_path.clone(), &mut tx).await;
-                            return_path = corrected_path.clone();
+                            // return_path = corrected_path.clone();
                         }
 
                         //inode_setattr
-                        if(data == 31){
+                        if data == 31 {
                             // println!("inoSetAtt {}", corrected_path);
                             ullfs_write(corrected_path.clone(), &mut tx).await;
                         }
 
                         //path_rmdir or inode_rmdir
-                        if(data == 2 || data == 16){
+                        if data == 2 || data == 16 {
                             check_inode = true;
                             mode = 4;
                             temp_path = corrected_path.clone();
@@ -531,13 +533,13 @@ async fn internal_behavior<C: SteadyCommander>(
                     // =             CHECK INODE              =
                     // ========================================
 
-                    if(check_inode){
-                        if(block_addr == inode_num){
+                    if check_inode {
+                        if block_addr == inode_num{
                             continue;
                         }
     
                         let dir_str: &str = &arc_w_dir_clone;
-                        if(base_path.is_empty()){
+                        if base_path.is_empty() {
                             base_path = dir_str.to_string();
                         }
                         else{
@@ -708,7 +710,7 @@ async fn internal_behavior<C: SteadyCommander>(
             // We needed multi transmitters and a single receiver.
             // All those transmitters send there data here, which will then send off to other actors
             // println!("{}", received_string);
-            let mut received_tcp_data = match received_data {
+            let received_tcp_data = match received_data {
                 Some(x) => x,
                 None => {
                     println!("Received none, end of receivers"); // Hopefully this code works

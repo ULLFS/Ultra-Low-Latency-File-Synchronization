@@ -1,6 +1,6 @@
 use structopt_derive::StructOpt;
 use steady_state::SystemdCommand;
-
+// #[ignore(deadcode)]
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 pub struct Args {
 
@@ -20,7 +20,9 @@ pub struct Args {
 }
 
 impl Args {
-    pub(crate) fn to_cli_string(&self, app: &str) -> String {
+#[allow(dead_code)]
+    pub(crate) 
+    fn to_cli_string(&self, app: &str) -> String {
         format!("{} --loglevel={}" //NOTE: add other args here as needed
                 , app
                 , self.loglevel

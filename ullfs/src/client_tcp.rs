@@ -1,49 +1,12 @@
-// use std::{borrow::BorrowMut, collections::HashMap, fs, io::{BufRead, BufReader}, net::TcpStream, sync::{OnceLock, RwLock}};
-
-// use serde_json::Value;
-// use std::io::{Write, Read};
-
-// use crate::{fileDifs, fileFilter};
-
 use std::{fs, io::Read};
 
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{fileDifs, fileFilter};
 
-// static INSTANCE :OnceLock<Connections> = OnceLock::new();
-// struct Connections {
-//     addresses: RwLock<HashMap<&'static String, &'static TcpStream>>,
-//     connections: u32,
-//     port: u32
-// }
-// impl Connections {
-//     pub fn new() -> Self {
-        
-//         let c = Connections {
-//             addresses: RwLock::new(HashMap::new()),
-//             connections: 0,
-//             port: 0
-//         };
-//         c.check_connections_config();
-//         c
-//     }
-//     pub fn get_instance() -> &'static Connections{
-//         INSTANCE.get_or_init(|| Connections::new())
-//     }
-// }
 pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStream){
     println!("Writing to connections:");
-    let mut c = stream;
-    // println!("Writing to {}", address);
-    // match c.read(&mut []){
-    //     Ok(x) => {}
-    //     Err(_) => {
-    //         Connections::get_instance().check_connections_config();
-            
-    //     }
-    // }
-    // println!("c.read complete");
+    // No idea why this is warning me that the mut is unused because removing it makes it an error
     let mut f = match fs::File::open(filepath){
         Ok(x) => x,
         Err(_) => {
@@ -61,7 +24,7 @@ pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStrea
     relative_path_bytes.push(1u8);
     // Push identifier for the full file send
     
-    match c.write(relative_path_bytes.as_slice()).await{
+    match stream.write(relative_path_bytes.as_slice()).await{
         Ok(x) => x,
         Err(x) => {
             // println!("Error on writing relative path: {} on connection address: {}",x, address);
@@ -72,7 +35,7 @@ pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStrea
     let mut buf = [0u8; 1024];
     let file_length = f.metadata().unwrap().len();
     println!("File length: {}", file_length);
-    c.write(&file_length.to_le_bytes()).await.expect("Failed to write file length");
+    let _ = stream.write(&file_length.to_le_bytes()).await.expect("Failed to write file length");
     // let mut reader = BufReader::new(f);
     let mut total_written = 0;
     loop {
@@ -81,9 +44,9 @@ pub async fn write_full_file_to_connection(filepath: &str, stream: &mut TcpStrea
             break;
         }
         total_written += num_bytes;
-        match c.write_all(&buf[..num_bytes]).await{
+        match stream.write_all(&buf[..num_bytes]).await{
             Ok(x) => x,
-            Err(x) => {
+            Err(_) => {
                 // println!("Failed to write to connection: {} while writing file data. Error: {}", address, x);
                 return;
             }
@@ -98,16 +61,7 @@ pub async fn write_delta_to_connection(delta: &fileDifs::Delta, filepath: &str, 
     // let mut addr = Connections::get_instance().await.addresses.write().unwrap();
     // for (address, connection) in addr.iter_mut() {
     println!("writing a delta");
-    let mut c = stream;
-    // println!("Writing to {}", address);
-    // match c.read(&mut []){
-    //     Ok(x) => {}
-    //     Err(_) => {
-    //         Connections::get_instance().check_connections_config();
-            
-    //     }
-    // }
-    // println!("c.read complete");
+    // println!("stream.read complete");
     let base_path = fileFilter::Filter::get_instance().get_base_dir();
     let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
     println!("{}", relative_path);
@@ -138,9 +92,9 @@ pub async fn write_delta_to_connection(delta: &fileDifs::Delta, filepath: &str, 
     for byte in delta.data.iter() {
         relative_path_bytes.push(*byte);
     }
-    c.write(&relative_path_bytes).await;
+    let _ = stream.write(&relative_path_bytes).await;
     // relative_path_bytes.push(delta.start_index.to_le_bytes());
-    // c.flush();
+    // stream.flush();
 
         
                         
@@ -155,7 +109,7 @@ pub async fn write_deletion_to_connection(filepath: &str, stream: &mut TcpStream
     let mut relative_path_bytes = relative_path.into_bytes();
     relative_path_bytes.push(0b0000);
     relative_path_bytes.push(4u8);
-    stream.write(&relative_path_bytes).await;
+    let _ = stream.write(&relative_path_bytes).await;
 
 }
 pub async fn write_move_to_connection(filepath_old: &str, filepath_new: &str, stream: &mut TcpStream){
@@ -181,7 +135,7 @@ pub async fn write_create_dir_to_connection(dirpath: &str, stream: &mut TcpStrea
     let mut relative_path_bytes = relative_path_old.into_bytes();
     relative_path_bytes.push(0b0000);
     relative_path_bytes.push(6u8);
-    stream.write(&relative_path_bytes).await;
+    let _ = stream.write(&relative_path_bytes).await;
 }
 pub async fn write_create_file_to_connection(filepath: &str, stream: &mut TcpStream){
     println!("Creating a file");
@@ -191,5 +145,5 @@ pub async fn write_create_file_to_connection(filepath: &str, stream: &mut TcpStr
     let mut relative_path_bytes = relative_path_old.into_bytes();
     relative_path_bytes.push(0b0000);
     relative_path_bytes.push(5u8);
-    stream.write(&relative_path_bytes).await;
+    let _ = stream.write(&relative_path_bytes).await;
 }

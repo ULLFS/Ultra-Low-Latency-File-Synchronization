@@ -1,14 +1,11 @@
 use std::{collections::HashMap, error::Error, time::Duration, sync::Arc};
 // use async_std::stream;
 use steady_state::*;
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::oneshot::{self, Receiver, Sender}, time::sleep, sync::Mutex};
-use crate::{actor::ebpf_listener::ChangeType, client_tcp::{self, write_create_dir_to_connection, write_create_file_to_connection, write_deletion_to_connection, write_move_to_connection}, fileDifs::{self, FileData}, fileFilter, Args, TcpChannel};
+use tokio::{net::TcpStream, sync::oneshot::{self, Sender}, time::sleep, sync::Mutex};
+use crate::{actor::ebpf_listener::ChangeType, client_tcp::{self, write_create_dir_to_connection, write_create_file_to_connection, write_deletion_to_connection, write_move_to_connection}, fileDifs, fileFilter, Args, TcpChannel};
 use super::ebpf_listener::{RuntimeState, TcpData};
 
-async fn resend_file(file: &String, stream: &mut TcpStream, name: String){
-    println!("Resending File: {} to address: {}", file, "llfs.ullfs.com");
-    client_tcp::write_full_file_to_connection(file, stream).await;
-}
+
 // fn create_full_filename(file: &String) -> String {
 //     let startDir = 
 // }
@@ -27,7 +24,7 @@ async fn read_streams <C: SteadyCommander>(
         let mut buf: Vec<u8> = Vec::new();
         let lost_connection: bool = match stream.try_read(&mut buf) {
             Ok(x) => {
-                if(x != 0) {
+                if x != 0 {
                     println!("Received a stream to resend")
                 }
                 for byte in buf{
@@ -37,8 +34,9 @@ async fn read_streams <C: SteadyCommander>(
                         let val = map_filenames.get(&name);
                         match val {
                             Some(x) => {
-                                println!("resending: {}", "llfs.ullfs.com");
-                                resend_file(x, stream, name).await;
+                                println!("resending: {}", x);
+                                // UNFINISHED PLEASE REFER TO connection_handler.rs
+                                // resend_file(x, stream, name).await;
                             }
                             None =>{}
                         };
@@ -97,7 +95,7 @@ async fn internal_behavior <C: SteadyCommander>(
     ebpf_receiver: SteadyRx<TcpData>,
     tcp_receiver: SteadyRx<TcpChannel>,
     mut connection_handler_sender: SteadyTx<String>,
-    state: SteadyState<RuntimeState>,
+    _state: SteadyState<RuntimeState>,
 ) -> Result<(),Box<dyn Error>> {
     //Expects received data to be in the following format:
     // Send_type\0Filepath
@@ -112,7 +110,7 @@ async fn internal_behavior <C: SteadyCommander>(
 
 
     let mut map_filenames: HashMap<String, String> = HashMap::new();
-    let mut vec_tcp_streams: Arc<Mutex<Vec<(TcpStream, String)>>> = Arc::new(Mutex::new(Vec::new()));
+    let vec_tcp_streams: Arc<Mutex<Vec<(TcpStream, String)>>> = Arc::new(Mutex::new(Vec::new()));
     let (mut cur_prod, mut cur_cons);
     // let mut prev_debounce = None;
     let mut old_data: Option<(Sender<u8>, TcpData)> = None;
@@ -148,8 +146,8 @@ async fn internal_behavior <C: SteadyCommander>(
                 let streams = vec_tcp_streams.clone();
                 match old_data{
                     Some((old_sender, info)) => {
-                        if(info == data) {
-                            old_sender.send(1u8); // Kill it
+                        if info == data {
+                            let _ = old_sender.send(1u8); // Kill it
                         }
                     }
                     None => {
@@ -171,36 +169,36 @@ async fn internal_behavior <C: SteadyCommander>(
                     // let 
                     println!("Data: {}-{}-{}", data.change_type as u8, data.filename, data.old_filename);
                     match data.change_type {
-                        ChangeType::create_dir => {
+                        ChangeType::CreateDir => {
                             let mut lock_streams = streams.lock().await;
-                            for (stream, name) in &mut lock_streams.iter_mut() {
+                            for (stream, _name) in &mut lock_streams.iter_mut() {
                                 let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
                                 let filename = base_dir.to_string() + &data.filename;
                                 write_create_dir_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::delete => {
+                        ChangeType::Delete => {
                             let mut lock_streams = streams.lock().await;
 
-                            for (stream, name) in &mut lock_streams.iter_mut() {
+                            for (stream, _name) in &mut lock_streams.iter_mut() {
                                 let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
                                 let filename = base_dir.to_string() + &data.filename;
                                 write_deletion_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::create_file => {
+                        ChangeType::_CreateFile => {
                             let mut lock_streams = streams.lock().await;
 
-                            for (stream, name) in &mut lock_streams.iter_mut(){
+                            for (stream, _name) in &mut lock_streams.iter_mut(){
                                 let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
                                 let filename = base_dir.to_string() + &data.filename;
                                 write_create_file_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::move_fdir => {
+                        ChangeType::MoveFDir => {
                             let mut lock_streams = streams.lock().await;
 
-                            for (stream, name) in &mut lock_streams.iter_mut() {
+                            for (stream, _name) in &mut lock_streams.iter_mut() {
                                 let base_dir = fileFilter::Filter::get_instance().get_base_dir();
                                 let filename = base_dir.to_string() + &data.filename;
                                 let old_filename = base_dir.to_string() + &data.old_filename;
@@ -208,7 +206,7 @@ async fn internal_behavior <C: SteadyCommander>(
 
                             }
                         }
-                        ChangeType::write => {
+                        ChangeType::Write => {
                             let base_dir = fileFilter::Filter::get_instance().get_base_dir();
                             let file = base_dir.to_string() + &data.filename;
                             // let file = data.filename;

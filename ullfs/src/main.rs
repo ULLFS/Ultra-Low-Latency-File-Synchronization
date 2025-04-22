@@ -10,12 +10,10 @@ use tokio::net::TcpStream;
 use crate::args::Args;
 use std::{fs, io::BufReader, process, sync::Arc, thread::Thread, time::Duration};
 use steady_state::*;
-mod client;
 pub mod filehasher;
 pub mod fileFilter;
 pub mod createPacket;
 pub mod fileDifs;
-pub mod hashFileDif;
 pub mod client_tcp;
 pub mod ebpf_setup;
 

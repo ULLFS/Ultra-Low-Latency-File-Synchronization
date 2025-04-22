@@ -24,7 +24,7 @@ pub async fn run(context: SteadyContext
 
 async fn internal_behavior <C: SteadyCommander>( 
     mut cmd: C,
-    state: SteadyState<RuntimeState>
+    _state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
 
     // println!("Running ram cleaner!");
@@ -36,7 +36,7 @@ async fn internal_behavior <C: SteadyCommander>(
         
         // Doesnt seem to
         // Sleep for 60 seconds
-        if(check_ram(num_minutes_passed)){
+        if check_ram(num_minutes_passed){
             num_minutes_passed = 1;
         } else {
             println!("Skipping a ram cleanup");
