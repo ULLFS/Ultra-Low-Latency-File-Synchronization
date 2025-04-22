@@ -169,7 +169,7 @@ async fn internal_behavior <C: SteadyCommander>(
                     // let 
                     println!("Data: {}-{}-{}", data.change_type as u8, data.filename, data.old_filename);
                     match data.change_type {
-                        ChangeType::CreateDir => {
+                        ChangeType::create_dir => {
                             let mut lock_streams = streams.lock().await;
                             for (stream, _name) in &mut lock_streams.iter_mut() {
                                 let base_dir = fileFilter::Filter::get_instance().get_base_dir();   
@@ -177,7 +177,7 @@ async fn internal_behavior <C: SteadyCommander>(
                                 write_create_dir_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::Delete => {
+                        ChangeType::delete => {
                             let mut lock_streams = streams.lock().await;
 
                             for (stream, _name) in &mut lock_streams.iter_mut() {
@@ -186,7 +186,7 @@ async fn internal_behavior <C: SteadyCommander>(
                                 write_deletion_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::_CreateFile => {
+                        ChangeType::create_file => {
                             let mut lock_streams = streams.lock().await;
 
                             for (stream, _name) in &mut lock_streams.iter_mut(){
@@ -195,7 +195,7 @@ async fn internal_behavior <C: SteadyCommander>(
                                 write_create_file_to_connection(&filename, stream).await;
                             }
                         }
-                        ChangeType::MoveFDir => {
+                        ChangeType::move_fdir => {
                             let mut lock_streams = streams.lock().await;
 
                             for (stream, _name) in &mut lock_streams.iter_mut() {
@@ -206,7 +206,7 @@ async fn internal_behavior <C: SteadyCommander>(
 
                             }
                         }
-                        ChangeType::Write => {
+                        ChangeType::write => {
                             let base_dir = fileFilter::Filter::get_instance().get_base_dir();
                             let file = base_dir.to_string() + &data.filename;
                             // let file = data.filename;
