@@ -1,16 +1,30 @@
-use std::{collections::HashMap, error::Error, fs, io::BufReader, ops::Index, time::Duration};
+use std::{error::Error, fs, io::BufReader, time::Duration};
 use serde_json::Value;
 use steady_state::*;
-use tokio::{net::{unix::SocketAddr, TcpSocket, TcpStream}, time::{timeout, sleep}};
-use crate::{Args, TcpChannel};
+use tokio::{net::TcpStream, time::{sleep, timeout}};
+use crate::{client_tcp, Args, TcpChannel};
 use super::ebpf_listener::RuntimeState;
+fn get_zero_byte_string(buffer: Vec<u8>, old_unfinished: &str) -> (Vec<String>, String) {
+    // Grabbing zero byte strings as well as returning the unfinished one if we have only gotten part of one
+    let mut cur_str = old_unfinished.to_string();
+    let mut vec_strings = Vec::new();
+    for byte in buffer {
+        if byte == 0u8 {
+            vec_strings.push(cur_str);
+            cur_str = String::new();
+        } else {
+            cur_str.push(byte as char);
+        }
+    }
 
-fn resend_data(input_data: Vec<u8>){
+
+    (vec_strings, cur_str)
 
 }
 
 fn get_connection_addresses() -> (Vec<String>, String){
     // println!("Checking connections config");
+    // Begin dealing with the config file
     let conf_file : fs::File = match fs::File::open("./config.json"){
         Ok(x) => x,
         Err(e) => {
@@ -18,6 +32,7 @@ fn get_connection_addresses() -> (Vec<String>, String){
             panic!("Error: config.json missing or destroyed.\n{}", e)
         }
     };
+    
     let reader = BufReader::new(conf_file);
     let conf : Value = match serde_json::from_reader(reader){
         Ok(x) => x,
@@ -34,17 +49,23 @@ fn get_connection_addresses() -> (Vec<String>, String){
     return (addresses_string, port);
 }
 
-async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disconnected: &Vec<String>) -> Vec<String>{
+async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String, String)>, disconnected: &Vec<String>) -> Vec<String>{
     let (mut addresses_string, port) = get_connection_addresses();
-    tcpstreams.retain(| (stream, address)| {
+    let mut resend_streams: Vec<(usize, Vec<String>, String)> = Vec::new();
+    let i = 0;
+    tcpstreams.retain_mut(| (stream, address, unfinished_str)| {
         let mut buf = Vec::new();
         let num_recvd = match stream.try_read(&mut buf){
             Ok(x) => {
-                resend_data(buf);
+                let (files, unfinished) = get_zero_byte_string(buf, unfinished_str);
+                // unfinished_str = unfinished;
+                resend_streams.push((i, files, unfinished));
+                // resend_data(buf, stream);
                 x
             }
             Err(_) => {
                 // An error means that we got no data, not that the connection had an issue
+                // So we set the number of bytes received to be something other than 0
                 1
             }
         };
@@ -52,7 +73,9 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
         // If the config.json changed which addresses to look at and this address was not in our
         // new data, drop the connection
         let mut output = num_recvd != 0;
-        if(!output){
+        if !output {
+            println!("Keeping address: {}", address);
+            // Remove the addresses that we still have a connection to
             addresses_string.retain(|adr| {
                 // Removing the addresses that are still good
                 if address == adr {
@@ -60,25 +83,31 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
                 }
                 address != adr
             });
+        } else {
+            println!("Getting rid of address: {}", address);
         }
-        
+        // Drop the stream from the list if it was lost
         output
     });
     let mut output = Vec::new();
     for address in addresses_string {
+        println!("Address checking for connection: {}", address);
+        // Make sure the list of disconnected streams contains the stream before we go to readd it.
         if !disconnected.contains(&address.to_string()) {
+            println!("Not disconnected");
             continue;
         }
+        // Attempt to connect to the stream
         let stream_future = TcpStream::connect(address.to_string() + ":" + port.as_str());
         // Only allow 10 seconds for each connection to establish and if not established give up
-        // This way we aren't waiting forever for a connection
-        // println!("Starting timeout");
+        // This way we aren't waiting forever for a connection if there are issues. Most of the time this is done within a couple ms
+        println!("Starting timeout");
         let stream = match timeout(Duration::from_secs(10), stream_future).await {
             Ok(x) => {
                 match x {
                     Ok(e) => e,
-                    Err(e) => {
-                        // println!("Failed to connect to address: {}:{}, {}", address, port,e );
+                    Err(_e) => {
+                        println!("Failed to connect to address: {}:{}, {}", address, port, _e);
                         output.push(address);
                         continue;
                     }
@@ -88,7 +117,14 @@ async fn check_connections_config(tcpstreams:&mut Vec<(TcpStream, String)>, disc
                 continue;
             }
         };
-        tcpstreams.push((stream, address.to_string()));
+        tcpstreams.push((stream, address.to_string(), String::new()));
+    }
+    for (stream_id, files, unfinished_file) in resend_streams {
+        for file in files {
+            client_tcp::write_full_file_to_connection(&file, &mut tcpstreams[stream_id].0).await;
+            tcpstreams[stream_id].2 = unfinished_file.clone();
+
+        }
     }
     return output;
 
@@ -118,10 +154,10 @@ async fn internal_behavior <C: SteadyCommander>(
     mut cmd: C, 
     transmitter: SteadyTx<TcpChannel>,
     receiver: SteadyRx<String>,
-    state: SteadyState<RuntimeState>
+    _state: SteadyState<RuntimeState>
 ) -> Result<(),Box<dyn Error>> {
     
-    let mut file_to_resend: HashMap<String, String> = HashMap::new();
+    // let file_to_resend: HashMap<String, String> = HashMap::new();
 
     let mut tx = transmitter.lock().await;
     let mut rx = receiver.lock().await;
@@ -136,7 +172,7 @@ async fn internal_behavior <C: SteadyCommander>(
         // for (connection, name) in connections{
         //     connections_clone.push((connection.clone(), name));
         // }
-
+        println!("Checking connections");
         let mut connections = Vec::new();
 
         disconnected = check_connections_config(&mut connections, &disconnected).await;
