@@ -1,0 +1,6 @@
+Sometimes a line will be added to the start!
+This is a testing file which will hold some random data
+Sometimes there will be lines that do nothing
+changed
+Sometimes there will be lines following a line that was deleted
+Sometimes a whole line will just be added to the end

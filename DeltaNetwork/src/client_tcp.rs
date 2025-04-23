@@ -74,64 +74,61 @@ impl Connections {
         return true;
     }
 }
-pub async fn write_full_file_to_connections(filepath: &str){
+pub async fn write_full_file_to_connections(filepath: &str, stream: &mut TcpStream){
     println!("Writing to connections:");
-    let mut addr = Connections::get_instance().await.addresses.write().unwrap();
-    for (address, mut connection) in addr.iter_mut() {
-        let mut c = connection;
-        println!("Writing to {}", address);
-        // match c.read(&mut []){
-        //     Ok(x) => {}
-        //     Err(_) => {
-        //         Connections::get_instance().check_connections_config();
-                
-        //     }
-        // }
-        // println!("c.read complete");
-        let base_path = fileFilter::Filter::get_instance().get_base_dir();
-        let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
-        let mut relative_path_bytes = relative_path.into_bytes();
-        relative_path_bytes.push(0b0000);
-        // Relative path now ends with a null byte which will never be allowed in a file name
-        // This is one of two characters that are completely illegal
-        relative_path_bytes.push(1u8);
-        // Push identifier for the full file send
-        match c.write(relative_path_bytes.as_slice()).await{
+    let mut c = stream;
+    // println!("Writing to {}", address);
+    // match c.read(&mut []){
+    //     Ok(x) => {}
+    //     Err(_) => {
+    //         Connections::get_instance().check_connections_config();
+            
+    //     }
+    // }
+    // println!("c.read complete");
+    let base_path = fileFilter::Filter::get_instance().get_base_dir();
+    let relative_path = filepath.replace(base_path, ""); // Removing base path from the file path to get relative path
+    let mut relative_path_bytes = relative_path.into_bytes();
+    relative_path_bytes.push(0b0000);
+    // Relative path now ends with a null byte which will never be allowed in a file name
+    // This is one of two characters that are completely illegal
+    relative_path_bytes.push(1u8);
+    // Push identifier for the full file send
+    
+    match c.write(relative_path_bytes.as_slice()).await{
+        Ok(x) => x,
+        Err(x) => {
+            // println!("Error on writing relative path: {} on connection address: {}",x, address);
+            return;
+        }
+    };
+    
+    let mut buf = [0u8; 1024];
+    let mut f = fs::File::open(filepath).expect(format!("File not found somehow: {}", filepath).as_str());
+    let file_length = f.metadata().unwrap().len();
+    println!("File length: {}", file_length);
+    c.write(&file_length.to_le_bytes()).await.expect("Failed to write file length");
+    // let mut reader = BufReader::new(f);
+    loop {
+        let num_bytes = f.read(&mut buf).expect(format!("Failed to read file: {}", filepath).as_str());
+        match c.write(&buf[..num_bytes]).await{
             Ok(x) => x,
             Err(x) => {
-                println!("Error on writing relative path: {} on connection address: {}",x, address);
+                // println!("Failed to write to connection: {} while writing file data. Error: {}", address, x);
                 return;
             }
         };
-        
-        let mut buf = [0u8; 1024];
-        let mut f = fs::File::open(filepath).expect(format!("File not found somehow: {}", filepath).as_str());
-        let file_length = f.metadata().unwrap().len();
-        println!("File length: {}", file_length);
-        c.write(&file_length.to_le_bytes()).await.expect("Failed to write file length");
-        // let mut reader = BufReader::new(f);
-        loop {
-            let num_bytes = f.read(&mut buf).expect(format!("Failed to read file: {}", filepath).as_str());
-            match c.write(&buf[..num_bytes]).await{
-                Ok(x) => x,
-                Err(x) => {
-                    println!("Failed to write to connection: {} while writing file data. Error: {}", address, x);
-                    return;
-                }
-            };
-            if num_bytes == 0 {
-                break;
-            }
+        if num_bytes == 0 {
+            break;
         }
-        
-        
     }
 }
-pub async fn write_delta_file_to_connections(delta: &fileDifs::Delta, filepath: &str){
-    let mut addr = Connections::get_instance().await.addresses.write().unwrap();
-    for (address, connection) in addr.iter_mut() {
-        let mut c = connection;
-        println!("Writing to {}", address);
+pub async fn write_delta_file_to_connections(delta: &fileDifs::Delta, filepath: &str, stream: &mut TcpStream){
+    // let mut addr = Connections::get_instance().await.addresses.write().unwrap();
+    // for (address, connection) in addr.iter_mut() {
+    println!("writing a delta");
+        let mut c = stream;
+        // println!("Writing to {}", address);
         // match c.read(&mut []){
         //     Ok(x) => {}
         //     Err(_) => {
@@ -175,6 +172,6 @@ pub async fn write_delta_file_to_connections(delta: &fileDifs::Delta, filepath: 
 
         
                         
-    }
+    // }
 }
 

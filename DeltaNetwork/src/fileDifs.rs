@@ -1,4 +1,4 @@
-use std::{fs::{self}, io::{BufReader, Read}};
+use std::{fs::{self}, io::{BufReader, Read}, ops::Add};
 // use bytes::Bytes;
 use serde_json::Value;
 use xxhash_rust::xxh3::{xxh3_64, Xxh3};
@@ -8,13 +8,13 @@ use std::sync::{OnceLock, RwLock};
 static INSTANCE: OnceLock<FileData> = OnceLock::new();
 pub struct File {
     data: Vec<u8>,
-    start_time: SystemTime,
+    time_remaining: u32,
 }
 impl File {
-    fn new(data: Vec<u8>, start_time : SystemTime) -> Self {
+    fn new(data: Vec<u8>, time_remaining : u32) -> Self {
         File {
             data: data,
-            start_time: start_time
+            time_remaining: time_remaining
         }
     }
 }
@@ -35,13 +35,13 @@ impl Delta {
     }
 }
 pub struct FileData{
-    file_map: RwLock<HashMap<&'static str, &'static File>>,
+    file_map: RwLock<HashMap<String, File>>,
     file_store_time: u32,
-    max_total_size: u32,
-    cur_total_size: u32
+    max_total_size: u64,
+    cur_total_size: RwLock<u64>
 }
 impl FileData {
-    fn new() -> Self {
+    fn new<'a>() -> Self {
         let conf_file : fs::File = match fs::File::open("./config.json"){
             Ok(x) => x,
             Err(e) => {
@@ -56,26 +56,26 @@ impl FileData {
                 panic!("Error: config.json structure damaged.\n{}", e);
             }
         }; 
-        let file_store_time: u32 = match conf["file_store_time_seconds"].as_u64(){
+        let file_store_time = match conf["file_store_time_minutes"].as_u64(){
             Some(x) =>x as u32,
             None => {
-                panic!("Error: file_store_time_seconds did not exist in config.json or was not an integer.");
+                panic!("Error: file_store_time_minutes did not exist in config.json or was not an integer.");
             }
         };
-        let max_total_size: u32 = match conf["max_total_size_mb"].as_u64(){
-            Some(x) => x as u32,
+        let max_total_size = match conf["max_total_size_mb"].as_u64(){
+            Some(x) => x,
             None => {
                 panic!("Error: max_total_size_gb did not exist in config.json or was not an integer.");
             }
         };
 
         // let map: HashMap<String, File> = );
-        let map: HashMap<&'static str, &'static File> = HashMap::new();
+        let map: HashMap<String, File> = HashMap::new();
         FileData { 
             file_map: RwLock::new(map),
             file_store_time: file_store_time,
             max_total_size: max_total_size,
-            cur_total_size: 0
+            cur_total_size: RwLock::new(0)
         }
     }
     pub fn get_instance() -> &'static FileData{
@@ -88,9 +88,55 @@ impl FileData {
     // async fn timeout(){
         
     // }
-    pub fn get_file_delta(&self, path : &str) -> Delta{
-        println!("{}", path);
-        let mut f = fs::File::open(&path).expect(format!("File not found {}", path).as_str());
+    pub fn add_file(&self, filepath: String) {
+        let mut file_map_lock = self.file_map.write().unwrap();
+        let mut file = match fs::File::open(&filepath) {
+            Ok(x) => x,
+            Err(_) => return
+        };
+        let mut size_lock = self.cur_total_size.write().unwrap();
+
+        if file.metadata().unwrap().len() <= (self.max_total_size - *size_lock) {
+            // size_lock += file.metadata().unwrap().len();
+            size_lock.add(file.metadata().unwrap().len());
+
+        } else {
+            // Not enough space left
+            return;
+        }
+        let mut file_data: Vec<u8> = Vec::new();
+        file.read_to_end(&mut file_data);
+        let f = File::new(file_data, self.file_store_time);
+        file_map_lock.insert(filepath, f);
+    }
+    pub fn clean_ram(&self, minutes_passed: u32) -> bool{
+        let mut files = match self.file_map.try_write() {
+            Ok(mut files) => files,
+            Err(e) => {
+                println!("Failed to clean RAM, error: {}", e);
+                return false;
+            }
+        };
+        
+        files.retain(|_, file| {
+            if file.time_remaining >= minutes_passed {
+                file.time_remaining -= minutes_passed;
+                true
+            } else {
+                println!("Deleting a file");
+                false
+            }
+        });
+        
+        true
+    }
+    pub fn contains_file(&self, path: &str) -> bool {
+        let map = self.file_map.read().unwrap();
+        map.contains_key(path)
+    }
+    pub fn get_file_delta(&self, before : &str, after: &str) -> Delta{
+        println!("{}", before);
+        let mut f = fs::File::open(&after).expect(format!("File not found {}", before).as_str());
         let mut buf : Vec<u8> = Vec::new();
         let r = fs::File::read_to_end(&mut f, &mut buf);
         // println!("A");
@@ -102,7 +148,7 @@ impl FileData {
         let mut map = instance.file_map.write().unwrap();
         // println!("A");
         
-        let file_data = match map.get(path){
+        let file_data = match map.get(before){
             Some(x) => x,
             None => {
                 // println!("B");
@@ -112,19 +158,19 @@ impl FileData {
                 let data_clone = buf.clone();
                 // println!("B");
                 
-                let f: File = File::new(buf, SystemTime::now());
+                let f: File = File::new(buf, self.file_store_time);
                 // Create a static str:
-                let path_static: &'static str = Box::leak(Box::new(path.to_string()));
-                let f_static : &'static File = Box::leak(Box::new(f));
-                map.insert(path_static, f_static);
+                // let path_static: &'static str = Box::leak(Box::new(path.to_string()));
+                // let f_static : &'static mut File = Box::leak(Box::new(f));
+                map.insert(before.to_string(), f);
                 return Delta::new(0,0, data_clone, 0);
                 
             }
         };
         let output_data = get_delta(&file_data.data, &buf);
         
-        let f = File::new(buf, SystemTime::now());
-        *map.get_mut(path).unwrap() = Box::leak(Box::new(f));
+        let f = File::new(buf, self.file_store_time);
+        *map.get_mut(before).unwrap() = f;
         return output_data;
     }
 }

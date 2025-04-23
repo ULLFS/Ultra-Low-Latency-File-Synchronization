@@ -8,7 +8,7 @@
     "ignore": [
         
     ],
-    "file_store_time_seconds":100,
+    "file_store_time_minutes":10,
     "max_total_size_mb":1000
     
 }
