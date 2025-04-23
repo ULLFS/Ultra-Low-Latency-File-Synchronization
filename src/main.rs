@@ -7,13 +7,10 @@ use std::time::Duration;
 use steady_state::*;
 
 mod actor {
-    
         pub mod tcp_listener;
         pub mod tcp_worker;
-        pub mod config_checker;
         pub mod handle_client;
         pub mod file_filter;
-        pub mod error_logger;
 }
 
 fn main() {
@@ -66,22 +63,6 @@ fn build_graph(mut graph: Graph) -> Graph {
         .with_capacity(1024)
         .build();
 
-        let (configchecker_str_conn_tx, tcpworker_str_conn_rx) = base_channel_builder
-        .with_capacity(10)
-        .build();
-
-    let (tcplisteneractor_error_conn_tx, errorlogger_listener_rx) = base_channel_builder
-        .with_capacity(5)
-        .build();
-
-    let (tcpworker_error_conn_tx, errorlogger_worker_rx) = base_channel_builder
-        .with_capacity(5)
-        .build();
-
-    /* let (configchecker_error_conn_tx, errorlogger_config_rx) = base_channel_builder
-        .with_capacity(5)
-        .build(); */
-
     //build actors
     
     {
@@ -91,7 +72,6 @@ fn build_graph(mut graph: Graph) -> Graph {
      base_actor_builder.with_name("Tcp Listener")
                  .build( move |context| actor::tcp_listener::run(context
                                             , tcplisteneractor_tcp_conn_tx.clone()
-                                            , tcplisteneractor_error_conn_tx.clone()
                                             , state.clone() )
                   , &mut Threading::Spawn );
 
@@ -104,38 +84,11 @@ fn build_graph(mut graph: Graph) -> Graph {
 
      base_actor_builder.with_name("Tcp Worker")
                  .build( move |context| actor::tcp_worker::run(context
-                                            , tcpworker_error_conn_tx.clone()
                                             , tcpworkeractor_tcp_conn_rx.clone()
-                                            ,tcpworker_str_conn_rx.clone()
                                             ,state.clone()
                                             )
                   , &mut Threading::Spawn );
         
-    }
-    
-
-    {
-        let state = new_state();
-
-        base_actor_builder.with_name("Config Checker")
-                    .build(move |context| actor::config_checker::run(context
-                                               ,configchecker_str_conn_tx.clone()
-                                               ,state.clone()
-                                               )
-                    ,&mut Threading::Spawn );
-    
-    }
-
-
-    {
-
-        base_actor_builder.with_name("Error Logger")
-                    .build(move |context| actor::error_logger::run(context
-                                                ,errorlogger_listener_rx.clone()
-                                                ,errorlogger_worker_rx.clone()
-                                                //,errorlogger_config_rx.clone()
-                                                )
-                    , &mut Threading::Spawn);
     }
 
     graph

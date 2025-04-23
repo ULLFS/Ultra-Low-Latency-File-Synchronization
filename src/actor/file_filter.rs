@@ -10,7 +10,7 @@ static INSTANCE: OnceLock<Filter> = OnceLock::new();
 // This isn't the correct rust way of doing this but I don't know the correct method
 pub struct Filter{
     ignore: Gitignore,
-    baseDir: String,
+    base_dir: String,
     // client_port: String,
     current_id: u64
 }
@@ -70,7 +70,7 @@ impl Filter{
 
         Filter {
             ignore: ignorer,
-            baseDir: watch_dir,
+            base_dir: watch_dir,
             // dns_web_address: f_dns_web_address,
             // client_port: f_client_port,
             current_id: 0
@@ -87,9 +87,9 @@ impl Filter{
         false
     }
 
-    // Getter for baseDir
+    // Getter for base_dir
     pub fn get_base_dir(&self) -> &str {
-        &self.baseDir.as_str()
+        &self.base_dir.as_str()
     }
     
     
